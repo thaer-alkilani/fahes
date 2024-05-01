@@ -1,0 +1,253 @@
+USE [FAHESVIS]
+GO
+/****** Object:  StoredProcedure [dbo].[SP_Registration_InsertRegisterVehicle]    Script Date: 5/1/2024 4:07:48 PM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+-- =============================================
+-- Author: Thaer Alkilani
+-- Create date: 10/11/2023
+-- Reference: 27
+-- Description:	create Registe Vehicle  
+-- ============================================= 
+ALTER PROCEDURE [dbo].[SP_Registration_InsertRegisterVehicle]
+    @Request_Id INT,
+    @Plate_No INT,
+    @Plate_Type INT,
+    @VIN_No NVARCHAR(255),
+    @Color_Id INT,
+    @Sub_Color_Id INT = NULL,
+    @Category_Id INT = NULL,
+    @Vehicle_Model_Id INT = NULL,
+    @Manufacturer_Id INT,
+    @Manufacturer_Year INT,
+    @MOI_Registration_Date DATETIME = NULL,
+    @Cylinders NVARCHAR(255),
+    @Weight INT = NULL,
+    @Payload_Weight INT = NULL,
+    @Shape_Code NVARCHAR(255),
+    @Description_En NVARCHAR(255) = NULL,
+    @Description_Ar NVARCHAR(255) = NULL,
+    @No_Of_Seat INT = NULL,
+    @License_Expiry_Date DATETIME = NULL,
+    @Owner_Type INT,
+    @Contact_Person_PID NVARCHAR(255),
+    @Contact_Person_Email NVARCHAR(255)= NULL,
+    @Contact_Person_Phone NVARCHAR(255),
+    @Owner_Id NVARCHAR(255) = NULL,
+    @Owner_PID NVARCHAR(255) = NULL,
+    @Owner_PID_Type INT = NULL,
+    @Owner_Name NVARCHAR(255) = NULL,
+	@Country_Id	INT= NULL,
+    @Department_Id INT = NULL,
+    @Created_By INT = NULL,
+    @Result INT OUTPUT,
+    @Error_Message						NVARCHAR(MAX) OUTPUT,--This Variable Used For Validation Error Messages
+	@DB_Error_Message					NVARCHAR(MAX) OUTPUT--This Variable Used For Database Error Messages
+AS
+BEGIN
+    BEGIN TRANSACTION; -- Start the transaction
+
+    BEGIN TRY
+
+
+		--No need to reinsert the vehicle after register it already 
+	   IF (SELECT 1 FROM [Register_Vehicle] WHERE [Request_Id] = @Request_Id AND [Plate_No] = @Plate_No AND  Plate_Type = @Plate_Type AND VIN_No = @VIN_No) = 1
+	   Begin
+	       SET @Result = @@ROWCOUNT;
+	   ENd
+	   ELSE
+	   BEGIN
+	   
+        INSERT INTO [dbo].[Register_Vehicle]
+                (
+                    [Request_Id],
+                    [Plate_No],
+                    [Plate_Type],
+                    [VIN_No],
+                    [Color_Id],
+                    [Sub_Color_Id],
+                    [Category_Id],
+                    [Vehicle_Model_Id],
+                    [Manufacturer_Id],
+                    [Manufacturer_Year],
+                    [MOI_Registration_Date],
+                    [Cylinders],
+                    [Weight],
+                    [Payload_Weight],
+                    [Shape_Code],
+                    [Description_En],
+                    [Description_Ar],
+                    [No_Of_Seat],
+                    [License_Expiry_Date],
+                    [Owner_Type],
+                    [Contact_Person_PID],
+                    [Contact_Person_Email],
+                    [Contact_Person_Phone],
+                    [Owner_Id],
+                    [Owner_PID_Type],
+                    [Owner_PID],
+                    [Owner_Name],
+					[Country_Id],
+                    [Department_Id],
+                    [Created_By],
+                    [Created_Date]
+                )
+        VALUES  (
+                    @Request_Id,
+                    @Plate_No,
+                    @Plate_Type,
+                    @VIN_No,
+                    @Color_Id,
+                    @Sub_Color_Id,
+                    @Category_Id,
+                    @Vehicle_Model_Id,
+                    @Manufacturer_Id,
+                    @Manufacturer_Year,
+                    @MOI_Registration_Date,
+                    @Cylinders,
+                    @Weight,
+                    @Payload_Weight,
+                    @Shape_Code,
+                    @Description_En,
+                    @Description_Ar,
+                    @No_Of_Seat,
+                    @License_Expiry_Date,
+                    @Owner_Type,
+                    @Contact_Person_PID,
+                    @Contact_Person_Email,
+                    @Contact_Person_Phone,
+                    @Owner_Id,
+                    @Owner_PID_Type,
+                    @Owner_PID,
+                    @Owner_Name,
+					@Country_Id,
+                    @Department_Id,
+                    @Created_By,
+                    SYSDATETIME()
+                );
+        SET @Result = @@ROWCOUNT;
+	   END ;
+    END TRY
+    BEGIN CATCH
+        SET @DB_Error_Message = ERROR_MESSAGE();
+        ROLLBACK; 
+        RETURN;
+    END CATCH;
+
+    COMMIT; 
+END;
+
+
+__________________________________
+_______________________________
+
+
+USE [FAHESVIS]
+GO
+/****** Object:  StoredProcedure [dbo].[SP_Registration_InsertVehicle]    Script Date: 5/1/2024 4:05:46 PM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+-- =============================================
+-- Author: Thaer Alkilani
+-- Create date: 10/10/2023
+-- Reference:3
+-- Description:	create Vehicle  
+-- ============================================= 
+ALTER PROCEDURE [dbo].[SP_Registration_InsertVehicle]
+    @Plate_No INT,
+    @Plate_Type INT,
+    @VIN_No NVARCHAR(255),
+    @Color_Id INT,
+    @Sub_Color_Id INT = NULL,
+    @Category_Id INT = NULL,
+    @Vehicle_Model_Id INT = NULL,
+    @Manufacturer_Id INT,
+    @Manufacturer_Year INT,
+    @MOI_Registration_Date DATETIME = NULL,
+    @Cylinders NVARCHAR(255),
+    @Weight INT = NULL,
+    @Payload_Weight INT = NULL,
+    @Shape_Code NVARCHAR(255) = NULL,
+    @No_Of_Seat INT = NULL,
+    @Owner_PID NVARCHAR(255) = NULL,
+    @Owner_Name NVARCHAR(255) = NULL,
+	@Country_Id	INT =NULL,
+    @License_Expiry_Date DATETIME = NULL,
+    @JSON_Obj NVARCHAR(MAX) = NULL,
+	@Latest_Renewal_Date DATETIME = NULL,
+    @Created_By INT = NULL,
+    @Result INT OUTPUT,
+    	@Error_Message						NVARCHAR(MAX) OUTPUT,--This Variable Used For Validation Error Messages
+	@DB_Error_Message					NVARCHAR(MAX) OUTPUT--This Variable Used For Database Error Messages
+AS
+BEGIN
+    BEGIN TRANSACTION; -- Start the transaction
+
+    BEGIN TRY
+        INSERT INTO [dbo].[Vehicle]
+                (
+                    Plate_No,
+                    Plate_Type,
+                    VIN_No,
+                    Color_Id,
+                    Sub_Color_Id,
+                    Category_Id,
+                    Vehicle_Model_Id,
+                    Manufacturer_Id,
+                    Manufacturer_Year,
+                    MOI_Registration_Date,
+                    Cylinders,
+                    Weight,
+                    Payload_Weight,
+                    Shape_Code,
+                    No_Of_Seat,
+                    Owner_PID,
+                    Owner_Name,
+					Country_Id,	
+                    License_Expiry_Date,
+                    JSON_Obj,
+					Latest_Renewal_Date,
+                    Created_By,
+                    Created_Date
+                )
+        VALUES  (
+                    @Plate_No,
+                    @Plate_Type,
+                    @VIN_No,
+                    @Color_Id,
+                    @Sub_Color_Id,
+                    @Category_Id,
+                    @Vehicle_Model_Id,
+                    @Manufacturer_Id,
+                    @Manufacturer_Year,
+                    @MOI_Registration_Date,
+                    @Cylinders,
+                    @Weight,
+                    @Payload_Weight,
+                    @Shape_Code,
+                    @No_Of_Seat,
+                    @Owner_PID,
+                    @Owner_Name,
+					@Country_Id,
+                    @License_Expiry_Date,
+                    @JSON_Obj,
+					@Latest_Renewal_Date,
+                    @Created_By,
+                    SYSDATETIME()
+                );
+
+        SET @Result = @@ROWCOUNT;
+    END TRY
+
+    BEGIN CATCH
+        SET @DB_Error_Message = ERROR_MESSAGE();
+        ROLLBACK; -- Rollback the transaction in case of an error
+        RETURN;
+    END CATCH;
+
+    COMMIT; -- Commit the transaction if everything is successful
+END;
