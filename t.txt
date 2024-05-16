@@ -167,112 +167,9 @@ END;
 ======================================================================================================
 
 
-
 USE [FAHESVIS]
 GO
-/****** Object:  StoredProcedure [dbo].[SP_BO_GetReceiptDetails]    Script Date: 5/16/2024 12:23:52 PM ******/
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
-ALTER PROCEDURE [dbo].[SP_BO_GetReceiptDetails]
-	@StationId INT,
-    @PlateNo INT = NULL,
-    @PlateType INT = NULL,
-    @VINNo NVARCHAR(255) = NULL,
-    @OwnerPID NVARCHAR(255) = NULL,
-    @OwnerPIDType INT = NULL,
-    @TotalAmount INT = NULL,
-    @PaymentMethod INT = NULL,
-    @CardType INT = NULL,
-    @POSId INT = NULL,
-    @FromDate DATETIME = NULL,
-    @ToDate DATETIME = NULL,
-    @ReceiptNo NVARCHAR(255) = NULL,
-    @ServiceName NVARCHAR(255) = NULL,
-    @PageIndex INT = 1,
-    @PageSize INT = 5, 
-    @Result INT OUTPUT, 
-    @Error_Message NVARCHAR(MAX) OUTPUT,
-    @DB_Error_Message NVARCHAR(MAX) OUTPUT,
-	@PageCount INT = 0 OUTPUT -- Output parameter for page count
-
-
-AS
-BEGIN
-    SET NOCOUNT ON;
- 
-    BEGIN TRY
-
-	DECLARE @Offset INT = CASE WHEN @PageSize > 0 THEN (@PageIndex - 1) * @PageSize ELSE 0 END;
-    DECLARE @FetchNextRows INT = CASE WHEN @PageSize > 0 THEN @PageSize ELSE 1000000 END;  
- 
-               ;WITH CTE AS (
-      SELECT  
-            RV.[Plate_No] AS PlateNo, 
-            RV.[Plate_Type] AS PlateType, 
-			[dbo].[Fn_Core_Get_LookUp](40, RV.[Plate_Type]) PlateTypeName,
-            RV.[VIN_No] AS VINNo, 
-            RV.[Owner_PID] AS OwnerPID, 
-            RV.[Owner_Name] AS OwnerName,
-            RV.[Owner_PID_Type] AS OwnerPIDType ,
-            SR.Request_Id as RequestId,
-            [dbo].[Fn_Get_Receipt_No](SR.Request_Id) AS ReceiptNo,
-            [dbo].[FN_Registration_GetServiceName](SR.Service_Type, SR.Request_Id) AS ServiceName,
-			[dbo].[FN_Registration_CheckIsExemptedVehicle](RV.[VIN_No]) AS IsExempted ,
-			ISR.Inspection_Service_Id as InspectionServiceId,
-			1 as ServiceType
-        FROM   [dbo].[Request_Invoice] RI 
-        INNER JOIN [dbo].[Invoice_Details] ID ON ID.Invoice_Id = RI.Invoice_Id
-        INNER JOIN [dbo].[Register_Vehicle] RV ON RV.Request_Id = ID.Request_Id 
-        INNER JOIN [dbo].[Service_Request] SR ON SR.Request_Id = RV.Request_Id
-		INNER JOIN [dbo].[Inspection_Request] ISR ON ISR.Request_Id = SR.Request_Id
-        WHERE 
-			SR.Station_Id = @StationId AND
-			ISR.Inspection_Service_Id  IN (select Service_Id  from Inspection_Service_Types where Service_Classification != 1) AND
-            (@PlateNo IS NULL OR RV.[Plate_No] = @PlateNo) AND
-            (@PlateType IS NULL OR RV.[Plate_Type] = @PlateType) AND
-            (@VINNo IS NULL OR RV.[VIN_No] LIKE '%' + @VINNo + '%') AND
-            (@OwnerPID IS NULL OR RV.[Owner_PID] = @OwnerPID) AND
-            (@OwnerPIDType IS NULL OR RV.[Owner_PID_Type] = @OwnerPIDType) AND  
-            (@FromDate IS NULL OR RI.[Created_Date] >= @FromDate) AND
-            (@ToDate IS NULL OR RI.[Created_Date] <= @ToDate) AND
-            (@ReceiptNo IS NULL OR [dbo].[Fn_Get_Receipt_No](SR.Request_Id) = @ReceiptNo) AND
-            (@ServiceName IS NULL OR [dbo].[FN_Registration_GetServiceName](SR.Service_Type, SR.Request_Id) = @ServiceName) AND
-            RI.[Created_Date] >= DATEADD(day, -30, GETDATE())
-            AND RI.Status = 3
-)
-
-     SELECT *, ROW_NUMBER() OVER (ORDER BY RequestId DESC) AS RowNumber INTO #TempTable
-        FROM CTE;
-
-        -- Calculate PageCount
-        SELECT @PageCount = CEILING(CAST(COUNT(*) AS FLOAT) / @PageSize)
-        FROM #TempTable;
-
-        -- Query from temporary table for pagination
-        SELECT *
-        FROM #TempTable
-        WHERE RowNumber > @Offset AND RowNumber <= @Offset + @FetchNextRows;
- 
-        SET @Result = 1;
-    END TRY
- 
-    BEGIN CATCH 
-        SET @DB_Error_Message = ERROR_MESSAGE(); 
-        SET @Result = 0;
-    END CATCH; 
-END;
-
-
-
-
-===================================================================================================================
-
-
-USE [FAHESVIS]
-GO
-/****** Object:  StoredProcedure [dbo].[SP_Registration_GetReceiptDetails]    Script Date: 5/16/2024 12:23:39 PM ******/
+/****** Object:  StoredProcedure [dbo].[SP_Registration_GetReceiptDetails]    Script Date: 5/16/2024 1:37:42 PM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -297,7 +194,7 @@ ALTER PROCEDURE [dbo].[SP_Registration_GetReceiptDetails]
     @Result INT OUTPUT, 
     @Error_Message NVARCHAR(MAX) OUTPUT,
     @DB_Error_Message NVARCHAR(MAX) OUTPUT,
-	@PageCount INT = 0 OUTPUT -- Output parameter for page count
+	@TotalRecords INT = 0 OUTPUT -- Output parameter for page count
 
 
 AS
@@ -417,7 +314,7 @@ BEGIN
         FROM CTE;
 
         -- Calculate PageCount
-        SELECT @PageCount = CEILING(CAST(COUNT(*) AS FLOAT) / @PageSize)
+        SELECT @TotalRecords = COUNT(*)  
         FROM #TempTable;
 
         -- Query from temporary table for pagination
@@ -426,6 +323,107 @@ BEGIN
         WHERE RowNumber > @Offset AND RowNumber <= @Offset + @FetchNextRows;
 
 
+        SET @Result = 1;
+    END TRY
+ 
+    BEGIN CATCH 
+        SET @DB_Error_Message = ERROR_MESSAGE(); 
+        SET @Result = 0;
+    END CATCH; 
+END;
+
+
+
+===================================================================================================================
+
+
+USE [FAHESVIS]
+GO
+/****** Object:  StoredProcedure [dbo].[SP_BO_GetReceiptDetails]    Script Date: 5/16/2024 1:37:32 PM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+ALTER PROCEDURE [dbo].[SP_BO_GetReceiptDetails]
+	@StationId INT,
+    @PlateNo INT = NULL,
+    @PlateType INT = NULL,
+    @VINNo NVARCHAR(255) = NULL,
+    @OwnerPID NVARCHAR(255) = NULL,
+    @OwnerPIDType INT = NULL,
+    @TotalAmount INT = NULL,
+    @PaymentMethod INT = NULL,
+    @CardType INT = NULL,
+    @POSId INT = NULL,
+    @FromDate DATETIME = NULL,
+    @ToDate DATETIME = NULL,
+    @ReceiptNo NVARCHAR(255) = NULL,
+    @ServiceName NVARCHAR(255) = NULL,
+    @PageIndex INT = 1,
+    @PageSize INT = 5, 
+    @Result INT OUTPUT, 
+    @Error_Message NVARCHAR(MAX) OUTPUT,
+    @DB_Error_Message NVARCHAR(MAX) OUTPUT,
+	@TotalRecords INT = 0 OUTPUT -- Output parameter for page count
+
+
+AS
+BEGIN
+    SET NOCOUNT ON;
+ 
+    BEGIN TRY
+
+	DECLARE @Offset INT = CASE WHEN @PageSize > 0 THEN (@PageIndex - 1) * @PageSize ELSE 0 END;
+    DECLARE @FetchNextRows INT = CASE WHEN @PageSize > 0 THEN @PageSize ELSE 1000000 END;  
+ 
+               ;WITH CTE AS (
+      SELECT  
+            RV.[Plate_No] AS PlateNo, 
+            RV.[Plate_Type] AS PlateType, 
+			[dbo].[Fn_Core_Get_LookUp](40, RV.[Plate_Type]) PlateTypeName,
+            RV.[VIN_No] AS VINNo, 
+            RV.[Owner_PID] AS OwnerPID, 
+            RV.[Owner_Name] AS OwnerName,
+            RV.[Owner_PID_Type] AS OwnerPIDType ,
+            SR.Request_Id as RequestId,
+            [dbo].[Fn_Get_Receipt_No](SR.Request_Id) AS ReceiptNo,
+            [dbo].[FN_Registration_GetServiceName](SR.Service_Type, SR.Request_Id) AS ServiceName,
+			[dbo].[FN_Registration_CheckIsExemptedVehicle](RV.[VIN_No]) AS IsExempted ,
+			ISR.Inspection_Service_Id as InspectionServiceId,
+			1 as ServiceType
+        FROM   [dbo].[Request_Invoice] RI 
+        INNER JOIN [dbo].[Invoice_Details] ID ON ID.Invoice_Id = RI.Invoice_Id
+        INNER JOIN [dbo].[Register_Vehicle] RV ON RV.Request_Id = ID.Request_Id 
+        INNER JOIN [dbo].[Service_Request] SR ON SR.Request_Id = RV.Request_Id
+		INNER JOIN [dbo].[Inspection_Request] ISR ON ISR.Request_Id = SR.Request_Id
+        WHERE 
+			SR.Station_Id = @StationId AND
+			ISR.Inspection_Service_Id  IN (select Service_Id  from Inspection_Service_Types where Service_Classification != 1) AND
+            (@PlateNo IS NULL OR RV.[Plate_No] = @PlateNo) AND
+            (@PlateType IS NULL OR RV.[Plate_Type] = @PlateType) AND
+            (@VINNo IS NULL OR RV.[VIN_No] LIKE '%' + @VINNo + '%') AND
+            (@OwnerPID IS NULL OR RV.[Owner_PID] = @OwnerPID) AND
+            (@OwnerPIDType IS NULL OR RV.[Owner_PID_Type] = @OwnerPIDType) AND  
+            (@FromDate IS NULL OR RI.[Created_Date] >= @FromDate) AND
+            (@ToDate IS NULL OR RI.[Created_Date] <= @ToDate) AND
+            (@ReceiptNo IS NULL OR [dbo].[Fn_Get_Receipt_No](SR.Request_Id) = @ReceiptNo) AND
+            (@ServiceName IS NULL OR [dbo].[FN_Registration_GetServiceName](SR.Service_Type, SR.Request_Id) = @ServiceName) AND
+            RI.[Created_Date] >= DATEADD(day, -30, GETDATE())
+            AND RI.Status = 3
+)
+
+     SELECT *, ROW_NUMBER() OVER (ORDER BY RequestId DESC) AS RowNumber INTO #TempTable
+        FROM CTE;
+
+        -- Calculate PageCount
+        SELECT @TotalRecords = COUNT(*) 
+        FROM #TempTable;
+
+        -- Query from temporary table for pagination
+        SELECT *
+        FROM #TempTable
+        WHERE RowNumber > @Offset AND RowNumber <= @Offset + @FetchNextRows;
+ 
         SET @Result = 1;
     END TRY
  
