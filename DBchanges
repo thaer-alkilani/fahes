@@ -1,0 +1,432 @@
+CREATE OR ALTER PROCEDURE [dbo].[SP_Supervisor_GetMobileWorkflow]
+    @To_User INT = NULL,
+    @Result INT OUTPUT,
+    @Error_Message NVARCHAR(MAX) OUTPUT,
+    @DB_Error_Message NVARCHAR(MAX) OUTPUT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    BEGIN TRY
+        SELECT 
+            Trans_Id AS TransId,
+            Request_Id AS RequestId,
+            Step_Id AS StepId,
+            From_User AS FromUser,
+			FU.User_Full_Name As FromUserName ,
+            To_User AS ToUser,
+            Begin_Date AS BeginDate,
+            Response_Date AS ResponseDate,
+            User_Remarks AS UserRemarks,
+            Action_Type AS ActionType,
+            Prev_Step AS PrevStep
+        FROM 
+            Mobile_Workflow
+			left join [dbo].[Users] FU on
+			FU.user_id = From_User
+        WHERE
+            (@To_User IS NULL OR To_User = @To_User)
+			and Action_Type is null;
+
+        SET @Result = @@ROWCOUNT;  -- Indicate success
+    END TRY
+    BEGIN CATCH
+        SET @DB_Error_Message = ERROR_MESSAGE();
+        SET @Result = -1;  -- Indicate failure
+        RETURN;
+    END CATCH;
+END;
+
+
+
+/*
+=============================================================
+=============================================================
+*/
+
+
+
+
+CREATE OR ALTER PROCEDURE [dbo].[SP_Supervisor_GetMobileBooking]
+    @Request_Id INT = NULL,
+    @Result INT OUTPUT,
+    @Error_Message NVARCHAR(MAX) OUTPUT,
+    @DB_Error_Message NVARCHAR(MAX) OUTPUT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    BEGIN TRY
+        SELECT 
+            Mobile_Booking.Request_Id AS RequestId,
+            Mobile_Booking.Fahes_Receipt_No AS FahesReceiptNo,
+            Mobile_Booking.Owner_Type AS OwnerType,
+            Mobile_Booking.Owner_Name AS OwnerName,
+            Mobile_Booking.Pid_No AS PidNo,
+            Mobile_Booking.Address,
+            Mobile_Booking.Location,
+            Mobile_Booking.Gatepass_Flag AS GatepassFlag,
+            Mobile_Booking.Inspection_Date AS InspectionDate,
+            Mobile_Booking.No_Of_Vehicle AS NoOfVehicle,
+            Mobile_Booking.Remaining_Balance AS RemainingBalance,
+            Mobile_Booking.Downpayment_Amount AS DownpaymentAmount,
+            Mobile_Booking.Traveling_Time AS TravelingTime,
+            Mobile_Booking.Inspection_Start_Date AS InspectionStartDate,
+           Mobile_Booking. Inspection_End_Date AS InspectionEndDate,
+            Mobile_Booking.Inspection_Duration AS InspectionDuration,
+            Mobile_Booking.Status,
+           Mobile_Booking. Remarks,
+            Mobile_Booking.Secondry_Phone_No AS SecondryPhoneNo,
+            Mobile_Booking.Inspection_Station_Id AS InspectionStationId,
+            Mobile_Booking.Created_By AS CreatedBy,
+           Mobile_Booking. Created_Date AS CreatedDate,
+            Mobile_Booking.Updated_By AS UpdatedBy,
+            Mobile_Booking.Updated_Date AS UpdatedDate,
+			sr.Contact_Person_Phone  as ContactPersonPhone
+        FROM 
+            Mobile_Booking
+			inner join dbo.service_request SR on sr.request_id = Mobile_Booking.request_id
+        WHERE
+            (@Request_Id IS NULL OR Mobile_Booking.Request_Id = @Request_Id);
+
+        SET @Result = @@ROWCOUNT;  -- Indicate success
+    END TRY
+    BEGIN CATCH
+        SET @DB_Error_Message = ERROR_MESSAGE();
+        SET @Result = -1;  -- Indicate failure
+        RETURN;
+    END CATCH;
+END;
+
+
+
+
+
+/*
+=============================================================
+=============================================================
+*/
+
+
+
+CREATE OR ALTER PROCEDURE [dbo].[SP_AppAdmin_UsersAssignPositionDML]
+    @OperationType NVARCHAR(10), -- 'INSERT', 'UPDATE', or 'DELETE'
+    @Assign_Id INT = NULL,
+    @User_Id INT = NULL,
+    @Station_Id INT = NULL,
+    @Lane_Id INT = NULL,
+    @Section_Id INT = NULL,
+    @Booth_Id INT = NULL,
+    @Position_Id INT = NULL,
+    @Is_DeletedStatus INT = NULL,
+    @Created_By INT = NULL,
+    @Updated_By INT = NULL,
+    @Result INT OUTPUT,
+    @Error_Message NVARCHAR(MAX) OUTPUT,
+    @DB_Error_Message NVARCHAR(MAX) OUTPUT -- This Variable Used For Database Error Messages
+AS
+BEGIN
+    BEGIN TRANSACTION; -- Start the transaction
+
+    BEGIN TRY
+        IF @OperationType = 'INSERT'
+        BEGIN
+            DECLARE @MAX_Assign_Id INT;
+            SELECT @MAX_Assign_Id = MAX(Assign_Id) + 1
+            FROM Users_Assign_Position;
+            
+
+            INSERT INTO Users_Assign_Position (Position_Id, User_Id, Station_Id, Lane_Id, Section_Id, Booth_Id, Is_DeletedStatus, Created_By, Created_Date, Assign_Id)
+            VALUES (@Position_Id, @User_Id, @Station_Id, @Lane_Id, @Section_Id, @Booth_Id, @Is_DeletedStatus, @Created_By, GETDATE(), @MAX_Assign_Id);
+
+            SET @Result = @@ROWCOUNT;  -- Indicate success
+        END
+        ELSE IF @OperationType = 'UPDATE'
+        BEGIN
+			IF @Assign_Id is null or @Assign_Id = 0 
+			begin
+				SET @Error_Message = 'Missing Assign_Id parameter!';
+			end
+			else
+			begin
+            UPDATE Users_Assign_Position
+            SET 
+                User_Id = @User_Id,
+                Station_Id = @Station_Id,
+                Lane_Id = @Lane_Id,
+                Section_Id = @Section_Id,
+                Booth_Id = @Booth_Id,
+                Position_Id = @Position_Id,
+                Is_DeletedStatus = @Is_DeletedStatus,
+                Updated_By = @Updated_By,
+                Updated_Date = GETDATE()
+            WHERE Assign_Id = @Assign_Id;
+
+            SET @Result = @@ROWCOUNT;  -- Indicate success
+			end
+        END
+        ELSE IF @OperationType = 'DELETE'
+        BEGIN
+            UPDATE Users_Assign_Position
+            SET 
+                Is_DeletedStatus = 1,
+                Updated_By = @Updated_By,
+                Updated_Date = GETDATE()
+            WHERE Assign_Id = @Assign_Id;
+
+            SET @Result = @@ROWCOUNT;  -- Indicate success
+        END
+        ELSE
+        BEGIN
+            SET @Error_Message = 'Invalid operation type!';
+            SET @Result = -1; -- Indicate failure
+            ROLLBACK; -- Rollback the transaction due to invalid operation type
+            RETURN;
+        END
+
+        COMMIT; -- Commit the transaction if everything is successful
+    END TRY
+    BEGIN CATCH
+        SET @DB_Error_Message = ERROR_MESSAGE();
+        SET @Result = -1; -- Indicate failure
+        ROLLBACK; -- Rollback the transaction in case of an error
+        RETURN;
+    END CATCH;
+END;
+
+
+
+/*
+=============================================================
+=============================================================
+*/
+
+
+ALTER FUNCTION [dbo].[FN_MOI_GetVehicleInspectionsHistory] 
+(	
+	@Vin_No			 nvarchar(max)
+)
+RETURNS TABLE 
+AS
+RETURN 
+(
+	select
+	   IR.[Inspection_Req_Id] as InspectionReqId
+      ,IR.[Request_Id] as  RequestId
+      ,IR.[Inspection_Service_Id] as InspectionServiceId
+	  ,IST.Service_Name as ServiceName
+	  ,IR.Inspection_Type as InspectionType 
+      ,IR.[Remarks]
+      ,IR.[Created_Date]  as CreatedDate
+	  ,IR.Created_By as CreatedBy 
+	  ,[dbo].[Fn_Core_Get_LookUp](46, IR.Inspection_Type)			 AS InspectionTypeValue 
+	  ,IR.[Final_Result] as FinalResult 
+	  ,[dbo].[Fn_Core_Get_LookUp](47, 	IR.[Final_Result]) AS FinalResultValue , 
+	  SD.[Station_Name_Ar]  As StationAr,
+	  SD.[Station_Name_En] AS Station,
+	  SR.Station_Id
+	   
+  FROM   [dbo].[Inspection_Request] IR  
+  inner join Inspection_Service_Types IST on
+  IST.Service_Id = IR.Inspection_Service_Id 
+  inner join Service_Request SR on
+  SR.Request_Id = IR.Request_Id
+  inner join Station_Def SD on
+  SD.Station_Id = SR.Station_Id
+  WHERE  IR.VIN_No = @Vin_No and IR.Status = 3
+)
+
+
+
+/*
+=============================================================
+=============================================================
+*/
+
+
+
+CREATE OR ALTER PROCEDURE [dbo].[SP_Supervisor_GetStationPosition]
+    @Position_Id INT = NULL,
+    @Status INT = NULL,
+    @Soft_Delete BIT = NULL,
+    @Result INT OUTPUT, 
+    @Error_Message NVARCHAR(MAX) OUTPUT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    BEGIN TRY
+        SELECT 
+            Position_Id PostionId,
+            Position_Aname PositionAname,
+            Position_Ename PositionEname,
+            Soft_Delete SoftDelete,
+            Status,
+            Created_By CreatedBy,
+            Created_Date CreatedDate,
+            Updated_By UpdatedBy,
+            Updated_Date UpdatedDate
+        FROM 
+            Station_Position
+        WHERE
+            (@Position_Id IS NULL OR Position_Id = @Position_Id) AND
+            (@Status IS NULL OR Status = @Status) AND
+            (@Soft_Delete IS NULL OR Soft_Delete = @Soft_Delete);
+
+        SET @Result = @@ROWCOUNT;  -- Indicate success
+    END TRY
+    BEGIN CATCH
+        SET @Error_Message = ERROR_MESSAGE();
+        SET @Result = -1;  -- Indicate failure
+        RETURN;
+    END CATCH;
+END;
+
+
+
+
+/*
+=============================================================
+=============================================================
+*/
+
+
+
+
+ ALTER PROCEDURE [dbo].[SP_MOI_GetVehicle]
+ @Plate_No					        INT,
+ @Plate_Type				        INT, 
+ @Result						    INT OUTPUT,  
+ @Error_Message						NVARCHAR(MAX) OUTPUT,--This Variable Used For Validation Error Messages
+ @DB_Error_Message					NVARCHAR(MAX) OUTPUT--This Variable Used For DatabASe Error Messages
+AS
+BEGIN
+   BEGIN TRY 
+ 
+DECLARE @LicenseExpiryDate DATETIME;
+DECLARE @Is_Vehicle_Exists BIT ;
+SELECT @Is_Vehicle_Exists = (SELECT DISTINCT 1 From [dbo].Vehicle WHERE Plate_No = @Plate_No And Plate_Type = @Plate_Type)
+
+SELECT @LicenseExpiryDate = (SELECT TOP 1 License_Expiry_Date
+FROM [dbo].[Vehicle] V  
+WHERE V.Plate_No = @Plate_No AND V.Plate_Type = @Plate_Type);
+
+ 	SELECT 
+	   DISTINCT 
+		V.Plate_No																							AS PlateNo,
+		V.Plate_Type																						AS PlateType,
+		slv.[Lk_Value_Aname]																				As PlateTypeAname,
+		slv.[Lk_Value_Ename]																				As PlateTypeEname,
+		V.VIN_No																							AS  VinNo, 
+		V.Color_Id																							AS ColorId,
+		V.Sub_Color_Id																						AS SubColorId,
+		--CASE WHEN 
+		--dbo.FN_GetCategoryByPlateType(@Plate_Type, V.Shape_Code) 
+		--IS NULL 
+		--THEN 
+		V.Category_Id																						AS CategoryId,
+		VC.Description_Ar																					AS CategoryDescriptionAr,							
+		VC.Description_En																					AS CategoryDescription,							
+		V.Vehicle_Model_Id																				    AS VehicleModelId,
+		V.Manufacturer_Id																				    AS ManufacturerId,
+		V.Manufacturer_Year																					AS ManufacturerYear,
+		V.MOI_Registration_Date																				AS MoiRegistrationDate,
+		V.Cylinders																							AS Cylinders,
+		V.[Weight]																							AS [Weight],
+		V.Payload_Weight																					AS PayloadWeight,
+		V.Shape_Code																						AS ShapeCode,
+		V.No_Of_Seat																						AS NoOfSeat,
+		CASE WHEN V.Owner_PID IS NULL THEN RV.[Owner_PID] ELSE V.Owner_PID END								AS OwnerPID,
+		CASE WHEN isnumeric(V.Owner_PID)  = 1  THEN 1 ELSE 2 END 											AS OwnerPidType , 
+		V.Owner_Name																						AS OwnerName, 
+		V.License_Expiry_Date																				AS LicenseExpiryDate, 
+		V.Created_By																						AS CreatedBy,
+		V.Created_Date																						AS CreatedDate,
+		M.Manufacturers_Ename																				AS ManufacturersEname,
+		VM.Model_Ename																					    AS ModelEname,  
+	 	RV.[Contact_Person_Email]																			AS ContactPersonEmail,
+	 	RV.[Contact_Person_Phone]																			AS ContactPersonPhone,
+	    RV.[Contact_Person_PID]																			    AS ContactPersonPID , 
+	CASE WHEN dbo.FN_Registration_CheckIsInspectionServiceAllowed(5, V.Category_Id) = 0 THEN 0
+    ELSE [dbo].[FN_Registration_CheckExternalVehicleIsAlreadyRegistered] (V.Plate_No,V.Plate_Type) END	    AS IsAlreadyRegisteredASExternal
+
+
+	FROM [dbo].[Vehicle] V
+	INNER JOIN Manufacturers M 
+	on M.Manufacturers_Id = V.Manufacturer_Id
+	LEFT JOIN [dbo].[Vehicle_Models] VM
+	on VM.Model_Id = V.Vehicle_Model_Id
+	LEFT JOIN (
+		SELECT TOP 1 *
+		FROM [dbo].[Register_Vehicle] 
+		WHERE  Plate_No = @Plate_No  and Plate_Type = @Plate_Type 
+		ORDER BY Created_Date DESC
+	) AS RV   
+	ON  RV.Plate_No = V.Plate_No and  RV.Plate_Type = V.Plate_Type
+	left join System_Lookups_Values slv on 
+	slv.Lk_Code = 40 and slv.Lk_Code_Value = V.Plate_Type
+	left join  [dbo].[Vehicle_Categories] VC
+	on VC.[Category_Id] = V.Category_Id
+	where V.Plate_No = @Plate_No  and V.Plate_Type = @Plate_Type AND (  V.VIN_NO IS NOT NULL AND V.VIN_NO <> '')
+
+ 
+
+	IF @Is_Vehicle_Exists IS NULL And @Plate_Type != 20   
+	Begin 
+		SET @Result = 0;
+		SET @Error_Message = 'Vehicle Not Found';
+		RETURN;
+	End;
+
+		IF @Is_Vehicle_Exists IS NULL And @Plate_Type != 21   
+	Begin 
+		SET @Result = 0;
+		SET @Error_Message = 'Vehicle Not Found';
+		RETURN;
+	End;
+
+	--IF @LicenseExpiryDate < GETDATE()
+	--BEGIN
+	--	SET @Result = 0;
+	--	SET @Error_Message = 'License is already expired.';
+	--	RETURN;
+	--END
+
+ --   IF @LicenseExpiryDate > DATEADD(DAY, 30, GETDATE())
+	--BEGIN
+	--	SET @Result = 0;
+	--	SET @Error_Message = 'License Expiry Date is More than 30 days from today.';
+	--	RETURN;
+	--END
+
+
+	SET @Result = @@ROWCOUNT 
+  END TRY 
+
+    BEGIN CATCH 
+        SET @DB_Error_Message = ERROR_MESSAGE(); 
+    END CATCH; 
+END
+
+
+
+
+/*
+=============================================================
+=============================================================
+*/
+
+
+
+
+
+
+
+DROP PROCEDURE SP_MOI_GetFinishedInprogressInspectionDetailsByReceiptNO
+DROP PROCEDURE SP_MOI_GetFinishedInprogressInspectionDetailsByRequestId
+DROP PROCEDURE SP_Supervisor_GetInspectionDetailsByReceiptNO
+DROP PROCEDURE SP_Supervisor_GetInspectionDetailsByPlateNoAndPlateType
+
+
+ 
+ 
