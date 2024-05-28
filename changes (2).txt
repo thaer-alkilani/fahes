@@ -1,0 +1,487 @@
+  
+
+79 Device Comment    
+ 
+81 Shape Category Types
+
+ 
+1 Yes 2 No
+
+1 Light 2 Light
+
+
+ =================================================================================================================================
+
+alter table mobile_booking add Team_Members nvarchar(max);
+
+====================================================================================================================================
+ALTER PROCEDURE [dbo].[SP_Supervisor_GetOnlinePaymentsTransactions] 
+(
+  @BusinessDay date = null,
+  @StationId int = null,
+  @Result INT OUTPUT,
+  @Error_Message NVARCHAR(MAX) OUTPUT
+)
+AS
+BEGIN
+
+    BEGIN TRY
+  SELECT top 10
+    bt.TRANS_ID AS transactionId,
+    bt.BANK_ACCOUNT_NO AS bankAccountNumber,
+    bt.LOCATION_CODE AS locationCode,   
+    bt.LOCATION_NAME AS locationName,
+    bt.MERCHANT_ID AS merchantId,
+    bt.TERMINAL_ID AS boothTerminal,
+    bt.TRXN_TYPE AS trxnType,
+    bt.TRXN_DATE AS date,
+    bt.TRXN_TIME AS time,
+    bt.POSTING_DATE AS postingDate,
+    bt.I049_TRANSACTION_CURRENCY_CODE AS transactionCurrencyCode,
+    bt.TRANSACTION_AMOUNT AS transactionAmount,
+    bt.COMMISSION_PERCENT AS bankCharge,
+    bt.COMMISSION_AMOUNT AS bankAmount,
+    bt.NET_AMOUNT AS netAmount,
+    bt.CARD_NUMBER AS cardNumber,
+    bt.PAYMENT_SYSTEM_NAME AS cardType,
+    bt.APPROVED_CODE AS approvedCode,
+    bt.I037_RETRIEVAL_REFERENCE_NUMBER AS rrn,
+    bt.TRANS_REQUEST_ID AS transRequestId,
+    bt.BUSINESS_DATE AS businessDate,
+    bt.REMARKS AS remarks,
+    info.Receipt_id AS receiptId,
+    info.ERP_CODE AS stationCode,
+    info.BothName AS bothName,
+    info.Station_Name_En AS stationName,
+    info.Station_Id AS stationId,
+    info.FAHES_Receipt_No AS fahesReceiptNo,
+    info.FahebankCom AS expectedCharge,
+    info.FahesAmount AS fahesAmount,
+    info.netfahesAmount AS netFahesAmount
+  FROM
+    [FAHESVIS].[dbo].[BANK_TRANSACTIONS] bt
+  LEFT JOIN (
+    SELECT
+      r.Receipt_id,
+      r.RRN,
+      sd.Station_Id,
+      ir.FAHES_Receipt_No,
+      sd.Station_Name_En,
+      sd.ERP_CODE,
+      bd.Description AS BothName,
+      r.Bank_Commission AS FahebankCom,
+      r.Total_Amount AS FahesAmount,
+      ISNULL(r.Bank_Commission, 0) - ISNULL(r.Total_Amount, 0) AS netfahesAmount
+    FROM
+      Receipt r
+    JOIN Invoice_Details id ON id.Invoice_Id = r.Invoice_Id
+    JOIN Service_Request sr ON sr.request_id = id.request_id
+    JOIN [Inspection_Request] ir ON IR.[Request_Id] = SR.[Request_Id]
+    JOIN Station_Def sd ON sd.Station_Id = sr.Station_Id
+    JOIN Booth_Def bd ON bd.Booth_Id = sr.Booth_Id
+      AND bd.Station_Id = sr.Station_Id
+  ) info ON CAST(info.RRN AS VARCHAR(15)) = bt.I037_RETRIEVAL_REFERENCE_NUMBER
+
+  WHERE (ISNULL(@BusinessDay, GETDATE()) = bt.BUSINESS_DATE OR @BusinessDay IS NULL)
+        AND (ISNULL(@StationId, 0) = info.Station_Id OR @StationId IS NULL)
+
+        SET @Result = @@ROWCOUNT;  -- Indicate success
+    END TRY
+    BEGIN CATCH
+        SET @Error_Message = ERROR_MESSAGE();
+        SET @Result = -1;  -- Indicate failure
+        RETURN;
+    END CATCH;
+END;
+
+============================================================================================================
+
+ALTER PROCEDURE [dbo].[SP_SysAdmin_GetSystemBlacklist]
+    @Entry_Id INT = NULL,
+    @Entry_Type INT = NULL,
+    @PID VARCHAR(255) = NULL,
+	@Report_Number INT = NULL, 
+    @Plate_No INT = NULL,
+    @Plate_Type INT = NULL,
+    @VIN_No VARCHAR(255) = NULL,
+    @Result INT OUTPUT,
+    @Error_Message NVARCHAR(MAX) OUTPUT,
+	@DB_Error_Message NVARCHAR(MAX) OUTPUT
+AS
+BEGIN
+    BEGIN TRY
+    
+   SELECT
+            Entry_Id EntryId,
+            Entry_Type EntryType,
+            PID,
+            Plate_No PlateNo,
+            Plate_Type PlateType,
+            VIN_No VinNo,
+            Reason,
+            Status,
+            Created_By CreateBy,
+            Created_Date CreatedDate,
+            Updated_By UpdatedBy,
+            Updated_Date UpdatedDate,
+			EntertTypeTbl.LookupValueEn EntryTypeEn,
+			EntertTypeTbl.LookupValueAr EntryTypeAr,
+
+			PlateTypeTbl.LookupValueEn PlateTypeEn,
+			PlateTypeTbl.LookupValueAr PlateTypeAr
+        FROM System_Blacklist
+		outer APPLY 
+	 [dbo].[Fn_Core_Get_LookUp_TBL](4,Entry_Type) EntertTypeTbl
+ 
+	 outer APPLY 
+	 [dbo].[Fn_Core_Get_LookUp_TBL](40,Plate_Type) PlateTypeTbl
+        WHERE
+            (@Entry_Id IS NULL OR Entry_Id = @Entry_Id)
+            AND (@Entry_Type IS NULL OR Entry_Type = @Entry_Type)
+            AND (@PID IS NULL OR PID = @PID)
+            AND (@Plate_No IS NULL OR Plate_No = @Plate_No)
+			AND (@VIN_No  IS NULL OR VIN_No like '%'+ @VIN_No + '%' )
+            AND (@Plate_Type IS NULL OR Plate_Type = @Plate_Type)
+			AND  System_Blacklist.Status = 1;
+
+        SET @Result = @@ROWCOUNT;  -- Indicate success
+    END TRY
+    BEGIN CATCH
+        SET @DB_Error_Message = ERROR_MESSAGE();
+        SET @Result = -1;  -- Indicate failure
+        RETURN;
+    END CATCH;
+END;
+
+
+
+=====================================================================
+
+
+ALTER PROCEDURE [dbo].[SP_SysAdmin_GetClientAssets]
+    @Client_Id INT = NULL,
+    @Type INT = NULL,
+    @IP_Address NVARCHAR(50) = NULL,
+    @Destination INT = NULL,
+    @Station_Id INT = NULL,
+    @Booth_Id INT = NULL,
+    @Lane_Id INT = NULL,
+    @Section_Id INT = NULL, 
+    @Result INT OUTPUT,
+    @Error_Message NVARCHAR(MAX) OUTPUT,
+	@DB_Error_Message NVARCHAR(MAX) OUTPUT
+AS
+BEGIN
+    BEGIN TRY
+        SELECT  
+            Client_Assets.Client_Id AS ClientId,
+            Client_Assets.Type,
+            Client_Assets.IP_Address AS IPAddress,
+            Client_Assets.Destination,
+            Client_Assets.Station_Id AS StationId,
+            Client_Assets.Booth_Id AS BoothId,
+            Client_Assets.Lane_Id AS LaneId,
+            Client_Assets.Section_Id AS SectionId,
+            Client_Assets.Status_Id AS StatusId,
+			sd.Station_Name_En StationNameEn,
+			sd.Station_Name_Ar as StationNameAr,
+			bd.Description ,
+			ld.Lane_Name as LaneName,
+			sec.Section_Name as SectionName,
+			ssv.Lk_Value_Ename as ClientType
+
+        FROM 
+            Client_Assets
+			inner join  Station_Def sd on sd.Station_Id  =  Client_Assets.Station_Id
+			left join  Booth_Def as bd on bd.Booth_Id = Client_Assets.Booth_Id
+			left join  Lanes_Def  as ld on ld.Lane_Id = Client_Assets.Lane_Id  
+			left join  [dbo].[Section_Def]   as sec on sec.[Section_Id]  = Client_Assets.Section_Id  
+			left join System_Lookups_Values ssv on ssv.Lk_Code = 73 and ssv.Lk_Code_Value = Client_Assets.Type
+        WHERE
+            (@Client_Id IS NULL OR Client_Assets.Client_Id = @Client_Id)
+            AND (@Type IS NULL OR Client_Assets.Type = @Type)
+            AND (@IP_Address IS NULL OR Client_Assets.IP_Address LIKE '%' + @IP_Address + '%')
+            AND (@Destination IS NULL OR Client_Assets.Destination = @Destination)
+            AND (@Station_Id IS NULL OR Client_Assets.Station_Id = @Station_Id)
+            AND (@Booth_Id IS NULL OR Client_Assets.Booth_Id = @Booth_Id)
+            AND (@Lane_Id IS NULL OR Client_Assets.Lane_Id = @Lane_Id)
+            AND (@Section_Id IS NULL OR Client_Assets.Section_Id = @Section_Id) ;
+
+        SET @Result = @@ROWCOUNT;  -- Indicate success
+    END TRY
+    BEGIN CATCH
+        SET @DB_Error_Message = ERROR_MESSAGE();
+        SET @Result = -1;  -- Indicate failure
+        RETURN;
+    END CATCH;
+END;
+
+===========================================================================================
+
+
+
+
+create PROCEDURE [dbo].[SP_Supervisor_UpdateMobileBooking]
+   @Request_Id					INT,
+    @Location                   NVARCHAR(255), 
+    @Inspection_Date            DATETIME, 
+    @Traveling_Time             DECIMAL(18, 0),   
+    @Team_Members				NVARCHAR(max) = NULL,   
+    @Updated_By                 INT = NULL, 
+    @Result                     INT OUTPUT,
+    @Error_Message              NVARCHAR(MAX) OUTPUT,
+    @DB_Error_Message           NVARCHAR(MAX) OUTPUT
+AS
+BEGIN
+    BEGIN TRANSACTION;
+
+    BEGIN TRY
+        -- Check if the record with the given Request_Id exists
+        IF EXISTS (SELECT 1 FROM [dbo].[Mobile_Booking] WHERE Request_Id = @Request_Id)
+        BEGIN
+            UPDATE [dbo].[Mobile_Booking]
+            SET  
+                Location = @Location,
+                Inspection_Date = @Inspection_Date,
+                Traveling_Time = @Traveling_Time,   
+                Team_Members = @Team_Members, 
+                Updated_By = @Updated_By,
+                Updated_Date = SYSDATETIME()
+            WHERE Request_Id = @Request_Id;
+
+            SET @Result = @@ROWCOUNT;
+        END
+        ELSE
+        BEGIN
+            SET @Error_Message = 'Mobile Booking with Request_Id ' + CAST(@Request_Id AS NVARCHAR(255)) + ' does not exist.';
+            SET @Result = 0;
+            ROLLBACK;
+            RETURN;
+        END
+    END TRY
+
+    BEGIN CATCH
+        SET @DB_Error_Message = ERROR_MESSAGE();
+        SET @Result = 0;
+        ROLLBACK;
+        RETURN;
+    END CATCH;
+
+    COMMIT;
+END;
+
+===========================================================================================
+
+
+
+LTER PROCEDURE [dbo].[SP_Inspection_GetInspectedVehicleReportDetails]
+(
+    @PlateNo						INT = NULL,
+    @PlateType						INT = NULL,
+    @VinNo							NVARCHAR(50) = NULL,
+    @ServiceType					INT = NULL,
+	@ReceiptNo						NVARCHAR(50) = NULL,
+    @ServiceId						INT = NULL,
+    @PageNo							INT = 1,
+    @PageSize						INT = 0,
+    @FromDate                       DATE = NULL,
+    @ToDate                         DATE = NULL, 
+	@Result							INT OUTPUT,
+	@Error_Message					NVARCHAR(MAX) OUTPUT ,
+	@DB_Error_Message				NVARCHAR(MAX) OUTPUT
+)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    BEGIN TRY 
+
+    DECLARE @Offset INT = CASE WHEN @PageSize > 0 THEN (@PageNo - 1) * @PageSize ELSE 0 END;
+    DECLARE @FetchNextRows INT = CASE WHEN @PageSize > 0 THEN @PageSize ELSE 1000000 END;  
+
+	 IF @FromDate IS NULL
+        SET @FromDate = DATEADD(DAY, -1, CONVERT(DATE, GETDATE()));
+
+    IF @ToDate IS NULL
+        SET @ToDate = CAST(GETDATE() AS DATE);
+
+    SELECT 
+        IR.Request_Id AS RequestId, 
+        IST.Service_Id AS ServiceId, 
+        1 AS ServiceType, 
+        IST.Service_Name AS ServiceName, 
+        IR.Plate_No AS PlateNo, 
+        IR.Plate_Type AS PlateType, 
+		[dbo].[Fn_Core_Get_LookUp](40, IR.Plate_Type ) as PlateTypeName,
+        IR.Vin_No AS VinNo, 
+        IST.Report_Fee AS ReportFee, 
+		IST.Report_FeesType as ReportFeesType ,
+		(select COUNT(*)  from Inspection_Results_Report_Log 
+			where Request_Id = IR.Request_Id and FAHES_Receipt_No = IR.FAHES_Receipt_No ) as PrevReqsForThisReport ,
+        CONVERT(NVARCHAR(MAX), IR.FAHES_Receipt_No) AS FAHESReceiptNo, 
+		CASE WHEN IST.Report_FeesType = 3 THEN 0 
+		  WHEN IST.Report_FeesType = 1 THEN 1 
+		WHEN (SELECT COUNT(*) FROM Inspection_Results_Report_Log 
+              WHERE Request_Id = IR.Request_Id AND FAHES_Receipt_No = IR.FAHES_Receipt_No) > 0 then 1 END 	as IsPaymentRequired,
+        RV.Owner_Name AS OwnerName, 
+        RV.Owner_PID AS OwnerPID
+    FROM 
+        [dbo].[Service_Request] SR
+    INNER JOIN 
+        [dbo].[Inspection_Request] IR ON IR.Request_Id = SR.Request_Id
+    INNER JOIN 
+        [dbo].[Inspection_Service_Types] IST ON IST.Service_Id = IR.Inspection_Service_Id
+    INNER JOIN 
+        [dbo].[Register_Vehicle] RV ON RV.Request_Id = SR.Request_Id
+    WHERE 
+        (@PlateNo IS NULL OR IR.Plate_No = @PlateNo)
+        AND (@PlateType IS NULL OR IR.Plate_Type = @PlateType)
+        AND (@VinNo IS NULL OR IR.Vin_No = @VinNo)
+        AND (@ReceiptNo IS NULL OR IR.FAHES_Receipt_No = @ReceiptNo)
+        AND (@ServiceType IS NULL OR 1 = @ServiceType)
+        AND (@ServiceId IS NULL OR IST.Service_Id = @ServiceId)
+		AND (@FromDate IS NULL OR IR.Created_Date >= @FromDate)
+          AND (@ToDate IS NULL OR IR.Created_Date <= @ToDate)
+        AND IR.Status = 3
+        AND SR.Status = 8
+    UNION ALL
+    SELECT 
+        TSR.Request_Id AS RequestId, 
+        TCS.Service_Id AS ServiceId, 
+        3 AS ServiceType, 
+        TCS.Service_Name AS ServiceName, 
+        TSR.Plate_No AS PlateNo, 
+        TSR.Plate_Type AS PlateType, 
+		[dbo].[Fn_Core_Get_LookUp](40, TSR.Plate_Type ) as PlateTypeName,
+        TSR.Vin_No AS VinNo, 
+        0 AS ReportFee, 
+		0 as ReportFeesType,
+		(select COUNT(*)  from Inspection_Results_Report_Log 
+			where Request_Id = TSR.Request_Id and FAHES_Receipt_No = TSR.FAHES_Receipt_Id ) as PrevReqsForThisReport ,
+        CONVERT(NVARCHAR(MAX), TSR.FAHES_Receipt_Id) AS FAHESReceiptNo,
+		0 as IsPaymentRequired ,
+        RV.Owner_Name AS OwnerName, 
+        RV.Owner_PID AS OwnerPID
+    FROM 
+        [dbo].[Service_Request] SR
+    INNER JOIN 
+        [dbo].[Tanker_Cert_Request] TSR ON TSR.Request_Id = SR.Request_Id
+    INNER JOIN 
+        [dbo].[Tanker_Cert_Services] TCS ON TCS.Service_Id = TSR.Tanker_Cert_Service_Id
+    INNER JOIN 
+        [dbo].[Register_Vehicle] RV ON RV.Request_Id = SR.Request_Id
+    WHERE 
+        (@PlateNo IS NULL OR TSR.Plate_No = @PlateNo)
+        AND (@PlateType IS NULL OR TSR.Plate_Type = @PlateType)
+        AND (@VinNo IS NULL OR TSR.Vin_No = @VinNo)
+		AND (@ReceiptNo IS NULL OR TSR.FAHES_Receipt_Id = @ReceiptNo)
+        AND (@ServiceType IS NULL OR 3 = @ServiceType)
+        AND (@ServiceId IS NULL OR TCS.Service_Id = @ServiceId)
+        AND (@FromDate IS NULL OR TSR.Created_Date >= @FromDate)
+		AND (@ToDate IS NULL OR  TSR.Created_Date <= @ToDate)
+        AND TSR.Status = 3
+        AND SR.Status = 8
+    UNION ALL
+    SELECT 
+        VSR.Request_Id AS RequestId, 
+        VST.Service_Id AS ServiceId, 
+        2 AS ServiceType, 
+        VST.Service_Name AS ServiceName, 
+        VSR.Plate_No AS PlateNo, 
+        VSR.Plate_Type AS PlateType, 
+		[dbo].[Fn_Core_Get_LookUp](40, VSR.Plate_Type ) as PlateTypeName,
+        VSR.Vin_No AS VinNo, 
+        0 AS ReportFee, 
+		0 as ReportFeesType,
+		(select COUNT(*)  from Inspection_Results_Report_Log 
+			where Request_Id = VSR.Request_Id and FAHES_Receipt_No = VSR.FAHES_Receipt_Id ) as PrevReqsForThisReport ,
+        CONVERT(NVARCHAR(MAX), VSR.FAHES_Receipt_Id) AS FAHESReceiptNo, 
+		0 as IsPaymentRequired ,
+        RV.Owner_Name AS OwnerName, 
+        RV.Owner_PID AS OwnerPID 
+    FROM 
+        [dbo].[Service_Request] SR
+    INNER JOIN 
+        [dbo].[Vin_Stamping_Requests] VSR ON VSR.Request_Id = SR.Request_Id
+    INNER JOIN 
+        [dbo].[Vin_Stamping_Services] VST ON VST.Service_Id = VSR.Service_Id
+    INNER JOIN 
+        [dbo].[Register_Vehicle] RV ON RV.Request_Id = SR.Request_Id
+    WHERE 
+        (@PlateNo IS NULL OR VSR.Plate_No = @PlateNo)
+        AND (@PlateType IS NULL OR VSR.Plate_Type = @PlateType)
+        AND (@VinNo IS NULL OR VSR.Vin_No = @VinNo)
+		AND (@ReceiptNo IS NULL OR VSR.FAHES_Receipt_Id = @ReceiptNo)
+        AND (@ServiceType IS NULL OR 2 = @ServiceType)
+        AND (@ServiceId IS NULL OR VST.Service_Id = @ServiceId)
+		AND (@FromDate IS NULL OR VSR.Created_Date >= @FromDate)
+		AND (@ToDate IS NULL OR  VSR.Created_Date <= @ToDate)
+        AND VSR.Status = 4
+        AND SR.Status = 8
+
+    ORDER BY RequestId desc
+    OFFSET @Offset ROWS FETCH NEXT @FetchNextRows ROWS ONLY;
+		
+		SET @Result = @@ROWCOUNT ;
+  END TRY 
+
+    BEGIN CATCH 
+		SET @Result = 0;
+        SET @DB_Error_Message = ERROR_MESSAGE(); 
+
+    END CATCH; 
+END;
+
+===========================================================================================
+
+
+create FUNCTION [dbo].[FN_AppAdmin_GetMainVisualDefects]
+(	 
+	@Name_En		NVARCHAR(MAX) NULL
+)
+RETURNS TABLE 
+AS
+RETURN 
+(
+  SELECT  DISTINCT  TOP 100000  
+	   DMC.[Main_Defect_Id] as MainDefectId
+      ,DMC.[Defect_Name_En] as DefectNameEn
+      ,DMC.[Defect_Name_Ar] as DefectNameAr
+      ,DMC.[Status]
+  FROM 
+  [dbo].[Defect_Main_Category] DMC 
+  WHERE  (DMC.[Defect_Name_En] LIKE '%' + @Name_En + '%' OR @Name_En IS NULL) 
+  ORDER BY DMC.[Main_Defect_Id] ASC
+)
+
+================================================================================
+
+ALTER FUNCTION  [dbo].[FN_AppAdmin_GetSubVisualDefectComments]
+(	
+	@Main_Defect_Id		INT,
+	@Sub_Defect_Id		INT,
+	@Description_En		NVARCHAR(MAX) NULL
+)
+RETURNS TABLE 
+AS
+RETURN 
+(
+  SELECT      
+			DC.[Def_Comment_Code] AS DefCommentCode,
+            DC.[Def_Comment_Id] AS DefCommentId,
+            DC.[Sub_Defect_Id] AS SubDefectId,
+            DC.[Main_Defects_Id] AS MainDefectsId,
+            dbo.FN_Inspection_GetDefectClassification(DC.[Main_Defects_Id], DC.[Comment_Type]) AS DefectClassification,
+            DC.[Description_En] AS DescriptionEn,
+            DC.[Description_Ar] AS DescriptionAr,
+            DC.[Mode],
+            DC.[Comment_Type] AS CommentType,
+            DC.[Device_Comment] AS DeviceComment,
+            DC.[Location] AS LocationValue 
+
+  FROM 
+  Defect_Comments DC
+  Where 
+	DC.[Main_Defects_Id]= @Main_Defect_Id  AND DC.Sub_Defect_Id = @Sub_Defect_Id   
+ AND (DC.[Description_En] LIKE '%' + @Description_En + '%' OR @Description_En IS NULL)
+)
+
