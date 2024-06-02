@@ -1,83 +1,40 @@
 
-  update [FAHESVIS].[dbo].[System_Lookups_Values]
-  set  Lk_Code_Value = 0		
-  where Lk_Code = 79 and Lk_Code_Value = 2
-===============================================================
-
-
-ALTER FUNCTION [dbo].[FN_Global_GetUserAssignPositionDetails]
-(	
-	@User_Id		INT,
-	@Station_Id		INT = NULL,
-	@Booth_Id		INT = NULL,
-	@Lane_Id	    INT = NULL,
-	@Section_Id		INT = NULL
-)
-RETURNS TABLE 
-AS
-RETURN 
+CREATE TABLE [dbo].[FAHES_Logs](
+	[Log_Id] [int] IDENTITY(1,1) NOT NULL,
+	[Log_Type] [int] NULL,
+	[User_Id] [int] NULL,
+	[Message] [nvarchar](max) NULL,
+	[Created_Date] [datetime] NULL,
+	[Source] [int] NULL,
+	[IPAddress] [nvarchar](45) NULL,
+ CONSTRAINT [PK__FahesLog__2D26E78EFD5289F3] PRIMARY KEY CLUSTERED 
 (
-	SELECT DISTINCT
-		[Station_Id]									 AS StationId,
-		dbo.FN_Global_GetStationClassificationId([Station_Id]) AS StationClassification,
-		dbo.FN_Global_GetStationNameById([Station_Id])   AS StationName,
-		[Lane_Id]										 AS LaneId,
-		dbo.FN_Global_GetLaneNameById([Lane_Id])         AS LaneName,
-		[Section_Id]									 AS SectionId,
-		dbo.FN_Global_GetSectionNameById([Section_Id])	 AS SectionName,
-		dbo.FN_Global_GetSectionClassificationId([Section_Id]) AS SectionClassification,
-		[Booth_Id]										 AS BoothId,
-		dbo.FN_Global_GetBoothNameById([Booth_Id])	     AS BoothName
-	FROM [dbo].[Users_Assign_Position]
-	WHERE  
-	[Is_DeletedStatus] = 0  AND
-	[User_Id] = @User_Id   
-	  
-		AND (@Station_Id IS NULL OR [Station_Id] = @Station_Id)
-        AND (@Section_Id IS NULL OR [Section_Id] = @Section_Id)
-        AND (@Booth_Id IS NULL OR [Booth_Id] = @Booth_Id)
-        AND (@Lane_Id IS NULL OR [Lane_Id] = @Lane_Id)
+	[Log_Id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
+GO
 
-)
+ALTER TABLE [dbo].[FAHES_Logs] ADD  CONSTRAINT [DF__FahesLogs__Creat__0C46B282]  DEFAULT (getdate()) FOR [Created_Date]
+GO
 
 
-==================================================================
-ALTER FUNCTION [dbo].[FN_Core_IsSupervisor] (@user_id INT)
-RETURNS BIT
-AS
-BEGIN
-    DECLARE @is_supervisor BIT;
-    
-    -- Initialize the output variable
-    SET @is_supervisor = 0;
 
-    -- Check if the user is a supervisor
-    IF EXISTS (SELECT 1 FROM dbo.Users_Roles WHERE user_id = @user_id AND Role_Id = 2)
-    BEGIN
-        SET @is_supervisor = 1;
-    END
-
-    RETURN @is_supervisor;
-END;
-
-================================================================
-
-finished 
-
-==========================================================
-
-CREATE TABLE Logs (
-    Log_ID INT PRIMARY KEY IDENTITY,
-    Log_Type NVARCHAR(50),
-    User_ID INT,
-    Message NVARCHAR(MAX),
-    DateTime DATETIME DEFAULT GETDATE(),
-    Source NVARCHAR(100),
-    IPAddress NVARCHAR(45)
-);
+---------------------------------------------------------------------------------------------------------------------------
 
 
-create PROCEDURE SP_Global_InsertFahesLog
+USE [FAHESVIS]
+GO
+/****** Object:  StoredProcedure [dbo].[SP_Global_InsertFahesLog]    Script Date: 6/2/2024 11:37:27 AM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+-- =============================================
+-- Author: Thaer Alkilani
+-- Create date: 30/5/2024 
+-- Description:	to insert log from fahes app
+-- ============================================= 
+ALTER PROCEDURE [dbo].[SP_Global_InsertFahesLog]
     @Log_Type INT,
     @User_Id INT,
     @Message NVARCHAR(MAX),
@@ -86,117 +43,58 @@ create PROCEDURE SP_Global_InsertFahesLog
 AS
 BEGIN
     INSERT INTO  [dbo].[FAHES_Logs] (Log_Type, User_Id, Message, Created_Date, Source, IPAddress)
-    
-
-===========================================================
-
+    VALUES (@Log_Type, @User_Id, @Message, GETDATE(), @Source, @IPAddress);
+END
 
 
-INSERT INTO [dbo].[System_Lookups_Values]
-           ([Lk_Code]
-           ,[Lk_Code_Value]
-           ,[Lk_Value_Aname]
-           ,[Lk_Value_Ename]
-           ,[Enabled_Flag]
-           ,[LK_Index] )
-     VALUES
-           (82
-           ,1
-           ,'Error'
-           ,'Error'
-           ,1
-           , 1)
+
+-----------------------------------------------------------------------------------------------------------------------------
+
+
+
+USE [FAHESVIS]
 GO
-
-
-
-
-
-INSERT INTO [dbo].[System_Lookups_Values]
-           ([Lk_Code]
-           ,[Lk_Code_Value]
-           ,[Lk_Value_Aname]
-           ,[Lk_Value_Ename]
-           ,[Enabled_Flag]
-           ,[LK_Index] )
-     VALUES
-           (82
-           ,2
-           ,'Warning'
-           ,'Warning'
-           ,1
-           , 1)
+/****** Object:  StoredProcedure [dbo].[SP_Global_InsertFahesLog]    Script Date: 6/2/2024 11:37:27 AM ******/
+SET ANSI_NULLS ON
 GO
-
-
-
-
-INSERT INTO [dbo].[System_Lookups_Values]
-           ([Lk_Code]
-           ,[Lk_Code_Value]
-           ,[Lk_Value_Aname]
-           ,[Lk_Value_Ename]
-           ,[Enabled_Flag]
-           ,[LK_Index] )
-     VALUES
-           (82
-           ,3
-           ,'Information'
-           ,'Information'
-           ,1
-           , 1)
-
+SET QUOTED_IDENTIFIER ON
 GO
+-- =============================================
+-- Author: Thaer Alkilani
+-- Create date: 30/5/2024 
+-- Description:	to insert log from fahes app
+-- ============================================= 
+ALTER PROCEDURE [dbo].[SP_Global_InsertFahesLog]
+    @Log_Type INT,
+    @User_Id INT,
+    @Message NVARCHAR(MAX),
+    @Source INT,
+    @IPAddress NVARCHAR(45)
+AS
+BEGIN
+    INSERT INTO  [dbo].[FAHES_Logs] (Log_Type, User_Id, Message, Created_Date, Source, IPAddress)
+    VALUES (@Log_Type, @User_Id, @Message, GETDATE(), @Source, @IPAddress);
+END
 
 
 
-INSERT INTO [dbo].[System_Lookups_Values]
-           ([Lk_Code]
-           ,[Lk_Code_Value]
-           ,[Lk_Value_Aname]
-           ,[Lk_Value_Ename]
-           ,[Enabled_Flag]
-           ,[LK_Index] )
-     VALUES
-           (82
-           ,4
-           ,'Login'
-           ,'Login'
-           ,1
-           , 1)
+-----------------------------------------------------------------------------------------------------------------------------
+
+
+
+USE [FAHESVIS]
 GO
-
-
-+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-
-
-lk_code = 70 names 
-
-
-  update System_Lookups_Values 
-  set Lk_Value_Aname = 'MOI Application',
-    Lk_Value_Ename =  'MOI Application'
-  where Lk_Code = 70 and Lk_Code_Value = 3
-
-
-
-
-update System_Lookups_Values 
-  set Lk_Value_Aname = 'Fahes Tablet Application',
-    Lk_Value_Ename =  'Fahes Tablet Application'
-  where Lk_Code = 70 and Lk_Code_Value = 2
-
-
-===================================================================================================================
-
-SP_SysAdmin_GetFahesLogs
-
+/****** Object:  StoredProcedure [dbo].[SP_SysAdmin_GetFahesLogs]    Script Date: 6/2/2024 11:38:57 AM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
 -- =============================================
 -- Author:		<Thaer ALkilani>
 -- Create date: <30/05/2024> 
 -- Description:	get APP Logs
 -- =============================================
-	alter PROCEDURE [dbo].[SP_SysAdmin_GetFahesLogs]
+	ALTER PROCEDURE [dbo].[SP_SysAdmin_GetFahesLogs]
     @Log_Id INT = NULL,
     @Log_Type INT = NULL,
     @User_Id INT = NULL,
