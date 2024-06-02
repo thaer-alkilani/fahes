@@ -1,90 +1,6 @@
-
-CREATE TABLE [dbo].[FAHES_Logs](
-	[Log_Id] [int] IDENTITY(1,1) NOT NULL,
-	[Log_Type] [int] NULL,
-	[User_Id] [int] NULL,
-	[Message] [nvarchar](max) NULL,
-	[Created_Date] [datetime] NULL,
-	[Source] [int] NULL,
-	[IPAddress] [nvarchar](45) NULL,
- CONSTRAINT [PK__FahesLog__2D26E78EFD5289F3] PRIMARY KEY CLUSTERED 
-(
-	[Log_Id] ASC
-)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
-) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
-GO
-
-ALTER TABLE [dbo].[FAHES_Logs] ADD  CONSTRAINT [DF__FahesLogs__Creat__0C46B282]  DEFAULT (getdate()) FOR [Created_Date]
-GO
-
-
-
----------------------------------------------------------------------------------------------------------------------------
-
-
 USE [FAHESVIS]
 GO
-/****** Object:  StoredProcedure [dbo].[SP_Global_InsertFahesLog]    Script Date: 6/2/2024 11:37:27 AM ******/
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
--- =============================================
--- Author: Thaer Alkilani
--- Create date: 30/5/2024 
--- Description:	to insert log from fahes app
--- ============================================= 
-ALTER PROCEDURE [dbo].[SP_Global_InsertFahesLog]
-    @Log_Type INT,
-    @User_Id INT,
-    @Message NVARCHAR(MAX),
-    @Source INT,
-    @IPAddress NVARCHAR(45)
-AS
-BEGIN
-    INSERT INTO  [dbo].[FAHES_Logs] (Log_Type, User_Id, Message, Created_Date, Source, IPAddress)
-    VALUES (@Log_Type, @User_Id, @Message, GETDATE(), @Source, @IPAddress);
-END
-
-
-
------------------------------------------------------------------------------------------------------------------------------
-
-
-
-USE [FAHESVIS]
-GO
-/****** Object:  StoredProcedure [dbo].[SP_Global_InsertFahesLog]    Script Date: 6/2/2024 11:37:27 AM ******/
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
--- =============================================
--- Author: Thaer Alkilani
--- Create date: 30/5/2024 
--- Description:	to insert log from fahes app
--- ============================================= 
-ALTER PROCEDURE [dbo].[SP_Global_InsertFahesLog]
-    @Log_Type INT,
-    @User_Id INT,
-    @Message NVARCHAR(MAX),
-    @Source INT,
-    @IPAddress NVARCHAR(45)
-AS
-BEGIN
-    INSERT INTO  [dbo].[FAHES_Logs] (Log_Type, User_Id, Message, Created_Date, Source, IPAddress)
-    VALUES (@Log_Type, @User_Id, @Message, GETDATE(), @Source, @IPAddress);
-END
-
-
-
------------------------------------------------------------------------------------------------------------------------------
-
-
-
-USE [FAHESVIS]
-GO
-/****** Object:  StoredProcedure [dbo].[SP_SysAdmin_GetFahesLogs]    Script Date: 6/2/2024 11:38:57 AM ******/
+/****** Object:  StoredProcedure [dbo].[SP_SysAdmin_GetFahesLogs]    Script Date: 6/2/2024 12:14:53 PM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -102,6 +18,8 @@ GO
 	@username NVARCHAR(45) = NULL,
 	@userFullName NVARCHAR(45) = NULL,
     @IPAddress NVARCHAR(45) = NULL,
+    @From_Date DATETIME = NULL,
+    @To_Date DATETIME = NULL,
     @Result INT OUTPUT,
     @Error_Message NVARCHAR(MAX) OUTPUT,
     @DB_Error_Message NVARCHAR(MAX) OUTPUT
@@ -135,6 +53,8 @@ BEGIN
             AND (@IPAddress IS NULL OR fl.IPAddress LIKE '%' + @IPAddress + '%')
 			AND (@username IS NULL OR u.Username LIKE '%' + @username + '%')
 			AND (@userFullName IS NULL OR u.User_Full_Name LIKE '%' + @userFullName + '%')
+            AND (@From_Date IS NULL OR fl.Created_Date >= @From_Date)
+            AND (@To_Date IS NULL OR fl.Created_Date <= @To_Date)
 
         SET @Result = 1;  -- Indicate success
     END TRY
