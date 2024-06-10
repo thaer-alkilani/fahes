@@ -1,374 +1,195 @@
-USE [FAHESVIS]
+ USE [FAHESVIS]
 GO
-/****** Object:  StoredProcedure [dbo].[SP_Supervisor_GetFinishedInprogressInspectionDetailsByRequestId]    Script Date: 6/9/2024 12:00:26 AM ******/
+/****** Object:  StoredProcedure [dbo].[SP_Inspection_GetInspectedVehicleReportDetails]    Script Date: 6/10/2024 2:53:04 PM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
 -- =============================================
--- Author: Thaer Alkilani
--- Create date: 24/3/2024 
--- Description:	retrieve Inspection Deatils by RrquestId - MOI
--- ============================================= 
-ALTER PROCEDURE [dbo].[SP_Supervisor_GetFinishedInprogressInspectionDetailsByRequestId]
-	@Request_Id							INT, 
-	@Result								INT			 OUTPUT, 
-	@Error_Message						NVARCHAR(MAX) OUTPUT,--This Variable Used For Validation Error Messages
-	@DB_Error_Message					NVARCHAR(MAX) OUTPUT--This Variable Used For Database Error Messages
+-- Author:		<Thaer Alkilani>
+-- Create date: <3/5/2024> 
+-- Description:	<Get vehicle services >
+-- =============================================
+ALTER PROCEDURE [dbo].[SP_Inspection_GetInspectedVehicleReportDetails]
+(
+    @PlateNo						INT = NULL,
+    @PlateType						INT = NULL,
+    @VinNo							NVARCHAR(50) = NULL,
+    @ServiceType					INT = NULL,
+	@ReceiptNo						NVARCHAR(50) = NULL,
+    @ServiceId						INT = NULL,
+    @PageNo							INT = 1,
+    @PageSize						INT = 0,
+    @FromDate                       DATE = NULL,
+    @ToDate                         DATE = NULL, 
+	@Result							INT OUTPUT,
+	@Error_Message					NVARCHAR(MAX) OUTPUT ,
+	@DB_Error_Message				NVARCHAR(MAX) OUTPUT
+)
 AS
 BEGIN
-   BEGIN TRY 
-    
-	select 
-	IR.[Inspection_Req_Id]						AS	InspectionReqId ,
-	IR.[Request_Id]								AS	RequestId,
-	IR.[FAHES_Receipt_No]						AS	FahesReceiptNo,
-	IR.[Inspection_Service_Id]					AS	InspectionServiceId,
-	IR.[Plate_No]								AS	PlateNo,
-	IR.[Plate_Type]								AS	PlateType,
-	IR.[VIN_No]									AS	VinNo,
-	(CASE WHEN 
-	IST.[Inspection_Type] = 1 --FULL
-	THEN 'True' ELSE 'FALSE' END )              AS  IsSectionSeqRequired,
-	IST.Service_Id								AS	ServiceId,
-	IST.Service_Name							AS	ServiceName,
-	IST.[Service_Type]							AS	ServiceType,
-	RV.Color_Id									AS	ColorId,
-	RV.Sub_Color_Id								AS	SubColorId,
-	RV.Category_Id								AS	CategoryId,
-	VC.Description_En							AS VehicleCategoryValue,
-	VC.Description_Ar							AS VehicleCategoryValueAr,
-	RV.Vehicle_Model_Id							AS	VehicleModelId,
-	VM.Model_Ename								AS	ModelEname,
-	RV.Manufacturer_Id							AS	ManufacturerId,
-	M.Manufacturers_Ename						AS	ManufacturersEname,
-	RV.Manufacturer_Year						AS	ManufacturerYear,
-	RV.MOI_Registration_Date					AS	MOIRegistrationDate,
-	RV.Cylinders								AS	Cylinders,
-	RV.Weight									AS	Weight,
-	RV.Payload_Weight							AS	PayloadWeight,
-	RV.Shape_Code								AS	ShapeCode,
-	RV.No_Of_Seat								AS	NoOfSeat,
-	RV.License_Expiry_Date						AS	LicenseExpiryDate,
-	RV.Owner_Type								AS	OwnerType,
-	RV.Contact_Person_PID						AS	ContactPersonPID,
-	RV.Contact_Person_Email						AS	ContactPersonEmail,
-	RV.Contact_Person_Phone						AS	ContactPersonPhone,
-	RV.Owner_Id									AS	OwnerId,
-	RV.Owner_PID								AS	OwnerPID,
-	RV.Owner_Name								AS	OwnerName,
-	SR.Station_Id								As StationId,
-	SD.Station_Name_Ar							as StationNameAr,
-	SD.Station_Name_En							as StationNameEn,
-	[dbo].[Fn_Core_Get_LookUp](40, 	IR.[Plate_Type]) AS PlateTypeName ,
-	[dbo].[Fn_Core_Get_LookUp_Ar](40, 	IR.[Plate_Type]) AS PlateTypeNameAr ,
-	IR.[Final_Result]							as FinalResult,
-	[dbo].[Fn_Core_Get_LookUp](47, 	IR.[Final_Result]) AS FinalResultValue  ,
-	[dbo].[FN_Get_Inspection_Step_Id_BY_Request_Id](IR.[Request_Id]) as InspectionStepId,
-	[dbo].[FN_Get_Section_Id_BY_Request_Id](IR.[Request_Id]) as SectionId,
+    SET NOCOUNT ON;
+    BEGIN TRY 
+
+    DECLARE @Offset INT = CASE WHEN @PageSize > 0 THEN (@PageNo - 1) * @PageSize ELSE 0 END;
+    DECLARE @FetchNextRows INT = CASE WHEN @PageSize > 0 THEN @PageSize ELSE 1000000 END;  
+
+	 IF @FromDate IS NULL
+        SET @FromDate = DATEADD(DAY, -1, CONVERT(DATE, GETDATE()));
+
+    IF @ToDate IS NULL
+        SET @ToDate = CAST(GETDATE() AS DATE);
+
+    SELECT 
+        IR.Request_Id AS RequestId, 
+        IST.Service_Id AS ServiceId, 
+        1 AS ServiceType, 
+        IST.Service_Name AS ServiceName, 
+        IR.Plate_No AS PlateNo, 
+        IR.Plate_Type AS PlateType, 
+		[dbo].[Fn_Core_Get_LookUp](40, IR.Plate_Type ) as PlateTypeName,
+        IR.Vin_No AS VinNo, 
+        IST.Report_Fee AS ReportFee, 
+		IST.Report_FeesType as ReportFeesType ,
+		(select COUNT(*)  from Inspection_Results_Report_Log 
+			where Request_Id = IR.Request_Id and FAHES_Receipt_No = IR.FAHES_Receipt_No ) as PrevReqsForThisReport ,
+        CONVERT(NVARCHAR(MAX), IR.FAHES_Receipt_No) AS FAHESReceiptNo, 
 		CASE 
-        WHEN DATEDIFF(day, IR.created_date, GETDATE()) < 30 THEN 1 
-        ELSE 0 
-    END AS IsEditableIspection
+		WHEN IST.Report_FeesType = 3 THEN 0 
+		WHEN IST.Report_FeesType = 1 THEN 1 
+		WHEN (SELECT COUNT(*) 
+          FROM Inspection_Results_Report_Log 
+          WHERE Request_Id = IR.Request_Id 
+            AND FAHES_Receipt_No = IR.FAHES_Receipt_No) > 0 THEN 1 ELSE 0 
+		END AS IsPaymentRequired,
+        RV.Owner_Name AS OwnerName, 
+        RV.Owner_PID AS OwnerPID
+    FROM 
+        [dbo].[Service_Request] SR
+    INNER JOIN 
+        [dbo].[Inspection_Request] IR ON IR.Request_Id = SR.Request_Id
+    INNER JOIN 
+        [dbo].[Inspection_Service_Types] IST ON IST.Service_Id = IR.Inspection_Service_Id
+    INNER JOIN 
+        [dbo].[Register_Vehicle] RV ON RV.Request_Id = SR.Request_Id
+    WHERE 
+        (@PlateNo IS NULL OR IR.Plate_No = @PlateNo)
+        AND (@PlateType IS NULL OR IR.Plate_Type = @PlateType)
+        AND (@VinNo IS NULL OR IR.Vin_No = @VinNo)
+        AND (@ReceiptNo IS NULL OR IR.FAHES_Receipt_No = @ReceiptNo)
+        AND (@ServiceType IS NULL OR 1 = @ServiceType)
+        AND (@ServiceId IS NULL OR IST.Service_Id = @ServiceId)
+		AND (@FromDate IS NULL OR IR.Created_Date >= @FromDate)
+          AND (@ToDate IS NULL OR IR.Created_Date <= @ToDate)
+        AND IR.Status = 3
+        AND SR.Status = 8
+    UNION ALL
+    SELECT 
+        TSR.Request_Id AS RequestId, 
+        TCS.Service_Id AS ServiceId, 
+        3 AS ServiceType, 
+        TCS.Service_Name AS ServiceName, 
+        TSR.Plate_No AS PlateNo, 
+        TSR.Plate_Type AS PlateType, 
+		[dbo].[Fn_Core_Get_LookUp](40, TSR.Plate_Type ) as PlateTypeName,
+        TSR.Vin_No AS VinNo, 
+        0 AS ReportFee, 
+		0 as ReportFeesType,
+		(select COUNT(*)  from Inspection_Results_Report_Log 
+			where Request_Id = TSR.Request_Id and FAHES_Receipt_No = TSR.FAHES_Receipt_Id ) as PrevReqsForThisReport ,
+        CONVERT(NVARCHAR(MAX), TSR.FAHES_Receipt_Id) AS FAHESReceiptNo,
+		0 as IsPaymentRequired ,
+        RV.Owner_Name AS OwnerName, 
+        RV.Owner_PID AS OwnerPID
+    FROM 
+        [dbo].[Service_Request] SR
+    INNER JOIN 
+        [dbo].[Tanker_Cert_Request] TSR ON TSR.Request_Id = SR.Request_Id
+    INNER JOIN 
+        [dbo].[Tanker_Cert_Services] TCS ON TCS.Service_Id = TSR.Tanker_Cert_Service_Id
+    INNER JOIN 
+        [dbo].[Register_Vehicle] RV ON RV.Request_Id = SR.Request_Id
+    WHERE 
+        (@PlateNo IS NULL OR TSR.Plate_No = @PlateNo)
+        AND (@PlateType IS NULL OR TSR.Plate_Type = @PlateType)
+        AND (@VinNo IS NULL OR TSR.Vin_No = @VinNo)
+		AND (@ReceiptNo IS NULL OR TSR.FAHES_Receipt_Id = @ReceiptNo)
+        AND (@ServiceType IS NULL OR 3 = @ServiceType)
+        AND (@ServiceId IS NULL OR TCS.Service_Id = @ServiceId)
+        AND (@FromDate IS NULL OR TSR.Created_Date >= @FromDate)
+		AND (@ToDate IS NULL OR  TSR.Created_Date <= @ToDate)
+        AND TSR.Status = 3
+        AND SR.Status = 8
+    UNION ALL
+    SELECT 
+        VSR.Request_Id AS RequestId, 
+        VST.Service_Id AS ServiceId, 
+        2 AS ServiceType, 
+        VST.Service_Name AS ServiceName, 
+        VSR.Plate_No AS PlateNo, 
+        VSR.Plate_Type AS PlateType, 
+		[dbo].[Fn_Core_Get_LookUp](40, VSR.Plate_Type ) as PlateTypeName,
+        VSR.Vin_No AS VinNo, 
+        0 AS ReportFee, 
+		0 as ReportFeesType,
+		(select COUNT(*)  from Inspection_Results_Report_Log 
+			where Request_Id = VSR.Request_Id and FAHES_Receipt_No = VSR.FAHES_Receipt_Id ) as PrevReqsForThisReport ,
+        CONVERT(NVARCHAR(MAX), VSR.FAHES_Receipt_Id) AS FAHESReceiptNo, 
+		0 as IsPaymentRequired ,
+        RV.Owner_Name AS OwnerName, 
+        RV.Owner_PID AS OwnerPID 
+    FROM 
+        [dbo].[Service_Request] SR
+    INNER JOIN 
+        [dbo].[Vin_Stamping_Requests] VSR ON VSR.Request_Id = SR.Request_Id
+    INNER JOIN 
+        [dbo].[Vin_Stamping_Services] VST ON VST.Service_Id = VSR.Service_Id
+    INNER JOIN 
+        [dbo].[Register_Vehicle] RV ON RV.Request_Id = SR.Request_Id
+    WHERE 
+        (@PlateNo IS NULL OR VSR.Plate_No = @PlateNo)
+        AND (@PlateType IS NULL OR VSR.Plate_Type = @PlateType)
+        AND (@VinNo IS NULL OR VSR.Vin_No = @VinNo)
+		AND (@ReceiptNo IS NULL OR VSR.FAHES_Receipt_Id = @ReceiptNo)
+        AND (@ServiceType IS NULL OR 2 = @ServiceType)
+        AND (@ServiceId IS NULL OR VST.Service_Id = @ServiceId)
+		AND (@FromDate IS NULL OR VSR.Created_Date >= @FromDate)
+		AND (@ToDate IS NULL OR  VSR.Created_Date <= @ToDate)
+        AND VSR.Status = 4
+        AND SR.Status = 8
 
-from  [dbo].[Service_Request] SR
-inner join 
-	[dbo].[Inspection_Request] IR on  IR.Request_Id = SR.Request_Id
-inner join 
-	[dbo].[Inspection_Service_Types] IST on IST.Service_Id = IR.Inspection_Service_Id  and IST.Include_MOI_Report = 1
-inner join
-	[dbo].[Register_Vehicle] RV	on RV.Request_Id = IR.Request_Id
-left join 
-	[dbo].[Lanes_Def] LD1 on LD1.[Lane_Id] = IR.[Assign_Lane_Id]
-left join 
-	[dbo].[Manufacturers] M on M.[Manufacturers_Id] = RV.[Manufacturer_Id]
-left join 
-	[dbo].[Vehicle_Models] VM on VM.[Model_Id] = RV.[Vehicle_Model_Id]
-left join  
-	[dbo].[Station_Def] SD on SD.Station_Id = SR.Station_Id
-left join  
-	[dbo].[Vehicle_Categories]  VC on VC.Category_Id = RV.Category_Id
-WHERE 
-	IR.[Status] In (1,3,4) AND 
-	SR.[Status] in (8 , 4) AND
-	IR.Request_Id = @Request_Id  
-order by IR.created_date desc
- 
-    SET @Result = @@ROWCOUNT;
-
-   if @Result = 0 
-	begin 
-            SET @Error_Message = 'There is no inspection request for this vehicle'; 
-
-        SET @Result = 0; 
-        RETURN;
-	end
-
-  END TRY 
-
-    BEGIN CATCH 
-        SET @DB_Error_Message = ERROR_MESSAGE(); 
-    END CATCH; 
-END
-
-
- 
- 
-/////////////////////////////////////////////////////////////////////////////////////////////////////
-
-
-
-
-
-USE [FAHESVIS]
-GO
-/****** Object:  StoredProcedure [dbo].[SP_Supervisor_GetFinishedInprogressInspectionDetailsByReceiptNO]    Script Date: 6/9/2024 12:00:16 AM ******/
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
--- =============================================
--- Author: Thaer Alkilani
--- Create date: 24/3/2024 
--- Description:	retrieve Inspection Deatils by ReceiptNO - MOI
--- ============================================= 
-ALTER PROCEDURE [dbo].[SP_Supervisor_GetFinishedInprogressInspectionDetailsByReceiptNO]
-	@ReceiptNO						    NVARCHAR(MAX), 
-	@Result								INT			 OUTPUT, 
-	@Error_Message						NVARCHAR(MAX) OUTPUT,--This Variable Used For Validation Error Messages
-	@DB_Error_Message					NVARCHAR(MAX) OUTPUT--This Variable Used For Database Error Messages
-AS
-BEGIN
-   BEGIN TRY 
-    
-	select  
-	IR.[Inspection_Req_Id]						AS	InspectionReqId ,
-	IR.[Request_Id]								AS	RequestId,
-	IR.[FAHES_Receipt_No]						AS	FahesReceiptNo,
-	IR.[Inspection_Service_Id]					AS	InspectionServiceId,
-	IR.[Plate_No]								AS	PlateNo,
-	IR.[Plate_Type]								AS	PlateType,
-	IR.[VIN_No]									AS	VinNo,
-	(CASE WHEN 
-	IST.[Inspection_Type] = 1 --FULL
-	THEN 'True' ELSE 'FALSE' END )              AS  IsSectionSeqRequired,
-	IST.Service_Id								AS	ServiceId,
-	IST.Service_Name							AS	ServiceName,
-	IST.[Service_Type]							AS	ServiceType,
-	RV.Color_Id									AS	ColorId,
-	RV.Sub_Color_Id								AS	SubColorId,
-	RV.Category_Id								AS	CategoryId,
-	VC.Description_En							AS VehicleCategoryValue,
-	VC.Description_Ar							AS VehicleCategoryValueAr,
-	RV.Vehicle_Model_Id							AS	VehicleModelId,
-	VM.Model_Ename								AS	ModelEname,
-	RV.Manufacturer_Id							AS	ManufacturerId,
-	M.Manufacturers_Ename						AS	ManufacturersEname,
-	RV.Manufacturer_Year						AS	ManufacturerYear,
-	RV.MOI_Registration_Date					AS	MOIRegistrationDate,
-	RV.Cylinders								AS	Cylinders,
-	RV.Weight									AS	Weight,
-	RV.Payload_Weight							AS	PayloadWeight,
-	RV.Shape_Code								AS	ShapeCode,
-	RV.No_Of_Seat								AS	NoOfSeat,
-	RV.License_Expiry_Date						AS	LicenseExpiryDate,
-	RV.Owner_Type								AS	OwnerType,
-	RV.Contact_Person_PID						AS	ContactPersonPID,
-	RV.Contact_Person_Email						AS	ContactPersonEmail,
-	RV.Contact_Person_Phone						AS	ContactPersonPhone,
-	RV.Owner_Id									AS	OwnerId,
-	RV.Owner_PID								AS	OwnerPID,
-	RV.Owner_Name								AS	OwnerName,
-	SR.Station_Id								As StationId,
-	SD.Station_Name_Ar							as StationNameAr,
-	SD.Station_Name_En							as StationNameEn,
-	[dbo].[Fn_Core_Get_LookUp](40, 	IR.[Plate_Type]) AS PlateTypeName ,
-	[dbo].[Fn_Core_Get_LookUp_Ar](40, 	IR.[Plate_Type]) AS PlateTypeNameAr ,
-	IR.[Final_Result]							as FinalResult,
-	[dbo].[Fn_Core_Get_LookUp](47, 	IR.[Final_Result]) AS FinalResultValue  ,
-	[dbo].[FN_Get_Inspection_Step_Id_BY_Request_Id](IR.[Request_Id]) as InspectionStepId,
-	[dbo].[FN_Get_Section_Id_BY_Request_Id](IR.[Request_Id]) as SectionId,
-		CASE 
-        WHEN DATEDIFF(day, IR.created_date, GETDATE()) < 30 THEN 1 
-        ELSE 0 
-    END AS IsEditableIspection
-
-from  [dbo].[Service_Request] SR
-inner join 
-	[dbo].[Inspection_Request] IR on  IR.Request_Id = SR.Request_Id
-inner join 
-	[dbo].[Inspection_Service_Types] IST on IST.Service_Id = IR.Inspection_Service_Id  and IST.Include_MOI_Report = 1
-inner join
-	[dbo].[Register_Vehicle] RV	on RV.Request_Id = IR.Request_Id
-left join 
-	[dbo].[Lanes_Def] LD1 on LD1.[Lane_Id] = IR.[Assign_Lane_Id]
-left join 
-	[dbo].[Manufacturers] M on M.[Manufacturers_Id] = RV.[Manufacturer_Id]
-left join 
-	[dbo].[Vehicle_Models] VM on VM.[Model_Id] = RV.[Vehicle_Model_Id]
-left join  
-	[dbo].[Station_Def] SD on SD.Station_Id = SR.Station_Id
-left join  
-	[dbo].[Vehicle_Categories]  VC on VC.Category_Id = RV.Category_Id
-WHERE 
-	IR.[Status] In (1,3,4) AND 
-	SR.[Status] in (8 , 4) AND
- IR.[FAHES_Receipt_No] = @ReceiptNO  
-order by IR.created_date desc
- 
-    SET @Result = @@ROWCOUNT;
-
-   if @Result = 0 
-	begin 
-            SET @Error_Message = 'There is no inspection request for this receipt'; 
-
-        SET @Result = 0; 
-        RETURN;
-	end
-
-  END TRY 
-
-    BEGIN CATCH 
-        SET @DB_Error_Message = ERROR_MESSAGE(); 
-    END CATCH; 
-END
-
-
- 
- 
-/////////////////////////////////////////////////////////////////////////////////////
-
-
-USE [FAHESVIS]
-GO
-/****** Object:  StoredProcedure [dbo].[SP_Supervisor_GetFinishedInprogressInspectionDetailsByPlateNoAndPlateType]    Script Date: 6/9/2024 12:00:12 AM ******/
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
--- =============================================
--- Author: Thaer Alkilani
--- Create date: 21/4/2024 
--- Description:	retrieve finished /inprogress Inspection Deatils 
--- ============================================= 
-ALTER PROCEDURE [dbo].[SP_Supervisor_GetFinishedInprogressInspectionDetailsByPlateNoAndPlateType]
- @Plate_No							INT,
- @Plate_Type						INT,  
- @Result						    INT OUTPUT, 
- @Error_Message					    NVARCHAR(MAX) OUTPUT ,
- @DB_Error_Message					NVARCHAR(MAX) OUTPUT--This Variable Used For Database Error Messages
-
-AS
-BEGIN
-   BEGIN TRY 
-
-	DECLARE @IsVehicleExist INT = (
-		SELECT TOP(1) 1 FROM [dbo].[Register_Vehicle] WHERE Plate_No = @Plate_No and @Plate_Type = @Plate_Type
-	 )
-	  
-	 IF @IsVehicleExist IS NULL 
-	 BEGIN 
-                SET @Error_Message = 'Vehicle with plate number ' + CAST(@Plate_No AS NVARCHAR) + ' does not exist.'; 
-
-            SET @Result = 0; 
-            RETURN;
-	 END;
-
- 		
-	select  
-		IR.[Inspection_Req_Id]						AS	InspectionReqId ,
-		IR.[Request_Id]								AS	RequestId,
-		IR.[FAHES_Receipt_No]						AS	FahesReceiptNo,
-		IR.[Inspection_Service_Id]					AS	InspectionServiceId,
-		IR.[Plate_No]								AS	PlateNo,
-		IR.[Plate_Type]								AS	PlateType,
-		IR.[VIN_No]									AS	VinNo,
-		(CASE WHEN 
-		IST.[Inspection_Type] = 1 --FULL
-		THEN 'True' ELSE 'FALSE' END )              AS  IsSectionSeqRequired,
-		IST.Service_Id								AS	ServiceId,
-		IST.Service_Name							AS	ServiceName,
-		IST.[Service_Type]							AS	ServiceType,
-		RV.Color_Id									AS	ColorId,
-		RV.Sub_Color_Id								AS	SubColorId,
-		RV.Category_Id								AS	CategoryId,
-		VC.Description_En							AS VehicleCategoryValue,
-		VC.Description_Ar							AS VehicleCategoryValueAr,
-		RV.Vehicle_Model_Id							AS	VehicleModelId,
-		VM.Model_Ename								AS	ModelEname,
-		RV.Manufacturer_Id							AS	ManufacturerId,
-		M.Manufacturers_Ename						AS	ManufacturersEname,
-		RV.Manufacturer_Year						AS	ManufacturerYear,
-		RV.MOI_Registration_Date					AS	MOIRegistrationDate,
-		RV.Cylinders								AS	Cylinders,
-		RV.Weight									AS	Weight,
-		RV.Payload_Weight							AS	PayloadWeight,
-		RV.Shape_Code								AS	ShapeCode,
-		RV.No_Of_Seat								AS	NoOfSeat,
-		RV.License_Expiry_Date						AS	LicenseExpiryDate,
-		RV.Owner_Type								AS	OwnerType,
-		RV.Contact_Person_PID						AS	ContactPersonPID,
-		RV.Contact_Person_Email						AS	ContactPersonEmail,
-		RV.Contact_Person_Phone						AS	ContactPersonPhone,
-		RV.Owner_Id									AS	OwnerId,
-		RV.Owner_PID								AS	OwnerPID,
-		RV.Owner_Name								AS	OwnerName,
-		SR.Station_Id								As StationId,
-		SD.Station_Name_Ar							as StationNameAr,
-		SD.Station_Name_En							as StationNameEn,
-		[dbo].[Fn_Core_Get_LookUp](40, 	IR.[Plate_Type]) AS PlateTypeName ,
-		[dbo].[Fn_Core_Get_LookUp_Ar](40, 	IR.[Plate_Type]) AS PlateTypeNameAr ,
-		IR.[Final_Result]							as FinalResult,
-		[dbo].[Fn_Core_Get_LookUp](47, 	IR.[Final_Result]) AS FinalResultValue ,
-		[dbo].[FN_Get_Inspection_Step_Id_BY_Request_Id](IR.[Request_Id]) as InspectionStepId,
-		[dbo].[FN_Get_Section_Id_BY_Request_Id](IR.[Request_Id]) as SectionId,
-	CASE 
-        WHEN DATEDIFF(day, IR.created_date, GETDATE()) < 30 THEN 1 
-        ELSE 0 
-    END AS IsEditableIspection
-
-	from  [dbo].[Service_Request] SR
-	inner join 
-		[dbo].[Inspection_Request] IR on  IR.Request_Id = SR.Request_Id
-	inner join 
-		[dbo].[Inspection_Service_Types] IST on IST.Service_Id = IR.Inspection_Service_Id  and IST.Include_MOI_Report = 1
-	inner join
-		[dbo].[Register_Vehicle] RV	on RV.Request_Id = IR.Request_Id
-	left join 
-		[dbo].[Lanes_Def] LD1 on LD1.[Lane_Id] = IR.[Assign_Lane_Id]
-	left join 
-		[dbo].[Manufacturers] M on M.[Manufacturers_Id] = RV.[Manufacturer_Id]
-	left join 
-		[dbo].[Vehicle_Models] VM on VM.[Model_Id] = RV.[Vehicle_Model_Id]
-	left join  
-		[dbo].[Station_Def] SD on SD.Station_Id = SR.Station_Id
-	left join  
-		[dbo].[Vehicle_Categories]  VC on VC.Category_Id = RV.Category_Id
-	WHERE
+    ORDER BY RequestId desc
+    OFFSET @Offset ROWS FETCH NEXT @FetchNextRows ROWS ONLY;
 		
-		IR.[Status] In (1,3,4) AND
-		SR.[Status] in (8 , 4)  AND
-		IR.Plate_No = @Plate_No  AND 
-		IR.Plate_Type = @Plate_Type  
-	order by IR.created_date desc
-
-   SET @Result = @@ROWCOUNT;
-
-   if @Result = 0 
-	begin 
-            SET @Error_Message = 'There is no inspection request for this vehicle'; 
-
-        SET @Result = 0; 
-        RETURN;
-	end
-
-END TRY 
+		SET @Result = @@ROWCOUNT ;
+  END TRY 
 
     BEGIN CATCH 
-        SET @Error_Message = ERROR_MESSAGE(); 
+		SET @Result = 0;
+        SET @DB_Error_Message = ERROR_MESSAGE(); 
+
     END CATCH; 
-END
+END;
 
 
- 
- 
+
+
+
+==========================================================================================
+
+
+
+
+WITH CTE AS (
+    SELECT 
+        [Assign_Id],
+        [User_Id],
+        ROW_NUMBER() OVER (PARTITION BY [User_Id] ORDER BY [Created_Date] DESC) AS rn
+    FROM [FAHESVIS].[dbo].[Users_Assign_Position]
+)
+DELETE FROM CTE WHERE rn > 1;
+
+
+
+  ALTER TABLE [FAHESVIS].[dbo].[Users_Assign_Position]
+ADD CONSTRAINT UQ_User_Assignment UNIQUE ([User_Id]);
