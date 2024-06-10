@@ -1,3 +1,17 @@
+-- ============================================= 
+ALTER PROCEDURE [dbo].[SP_Global_InsertFahesLog]
+    @Log_Type INT,
+    @User_Id INT,
+    @Message NVARCHAR(MAX),
+    @Source INT,
+    @IPAddress NVARCHAR(45)
+AS
+BEGIN
+    INSERT INTO  [dbo].[FAHES_Logs] (Log_Type, User_Id, Message, Created_Date, Source, IPAddress)
+    VALUES (@Log_Type, @User_Id, @Message, GETDATE(), @Source, @IPAddress);
+END
+
+=============================================================================================================================
  USE [FAHESVIS]
 GO
 /****** Object:  StoredProcedure [dbo].[SP_Inspection_GetInspectedVehicleReportDetails]    Script Date: 6/10/2024 2:53:04 PM ******/
