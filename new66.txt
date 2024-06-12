@@ -10,8 +10,8 @@ alter PROCEDURE [dbo].[SP_Supervisor_UpdateBrakeResultsLog]
     @MinDeceleration               INT = NULL,
     @ActualDeceleration            INT = NULL,  
     @Result                        INT OUTPUT,
-    @ErrorMessage                  NVARCHAR(MAX) OUTPUT, -- This Variable Used For Validation Error Messages
-    @DBErrorMessage                NVARCHAR(MAX) OUTPUT  -- This Variable Used For Database Error Messages
+    @Error_Message                  NVARCHAR(MAX) OUTPUT, -- This Variable Used For Validation Error Messages
+    @DB_Error_Message                NVARCHAR(MAX) OUTPUT  -- This Variable Used For Database Error Messages
 AS
 BEGIN
     BEGIN TRANSACTION; -- Start the transaction
@@ -41,7 +41,7 @@ BEGIN
         END
         ELSE
         BEGIN
-            SET @ErrorMessage = 'Record with Request_Id ' + CAST(@RequestId AS NVARCHAR(255)) 
+            SET @Error_Message = 'Record with Request_Id ' + CAST(@RequestId AS NVARCHAR(255)) 
                                 + ', Inspection_Req_Id ' + CAST(@InspectionReqId AS NVARCHAR(255)) 
                                 + ', and Brake_Read_Type ' + CAST(@BrakeReadType AS NVARCHAR(255)) + ' does not exist.';
             SET @Result = 0;
@@ -51,7 +51,7 @@ BEGIN
     END TRY
 
     BEGIN CATCH
-        SET @DBErrorMessage = ERROR_MESSAGE();
+        SET @DB_Error_Message = ERROR_MESSAGE();
         SET @Result = 0;
         ROLLBACK;  
         RETURN;
