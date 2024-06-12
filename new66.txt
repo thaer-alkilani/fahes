@@ -6,6 +6,50 @@
     }
 }
 
+=============================================================================================================================
+
+USE [FAHESVIS]
+GO
+/****** Object:  UserDefinedFunction [dbo].[FN_InspectionDevices_GetBrakeResults]    Script Date: 6/12/2024 2:45:16 PM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+-- =============================================
+-- Author:	Hamza Ali
+-- Create date: 15/4/2024
+-- Description:	Return the break result
+-- =============================================
+ALTER FUNCTION [dbo].[FN_InspectionDevices_GetBrakeResults]
+(	
+	@Section_Id		INT,
+	@Request_Id		INT
+)
+RETURNS TABLE 
+AS
+RETURN 
+(
+	SELECT DISTINCT TOP 100
+		BBL.Description_En				AS DescriptionEn,
+		BBL.Left_Value					AS LeftValue,
+		BBL.Right_Value					AS RightValue,
+		BBL.Weight						AS Weight,
+		BBL.Max_Difference				AS MaxDifference,
+		BBL.Actual_Difference			AS ActualDifferences,
+		BBL.Min_Deceleration			AS MinDeceleration,
+		BBL.Actual_Deceleration			AS ActualDeceleration,
+		BBL.Request_Id					AS RequestId,
+		BBL.Inspection_Req_Id			AS InspectionReqId,
+		BBL.Brake_Read_Type				As BrakeReadType
+
+	FROM [dbo].[Brake_Results_Log] BBL
+	INNER JOIN [dbo].[Brake_Reads_log] BRL ON BBL.Request_Id = BRL.Request_Id
+	WHERE 
+		--BRL.Section_Id = @Section_Id AND 
+		BRL.Request_Id = @Request_Id
+	ORDER BY BBL.Brake_Read_Type
+)
+
 =================================================
 
 USE [FAHESVIS]
