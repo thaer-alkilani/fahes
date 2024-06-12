@@ -1,18 +1,14 @@
-create PROCEDURE [dbo].[SP_Supervisor_UpdateBrakeResultsLog]
+alter PROCEDURE [dbo].[SP_Supervisor_UpdateBrakeResultsLog]
     @RequestId                     INT,
     @InspectionReqId               INT,
     @BrakeReadType                 INT,
-    @DescriptionAr                 NVARCHAR(MAX) = NULL,
-    @DescriptionEn                 NVARCHAR(MAX) = NULL,
     @LeftValue                     DECIMAL(18, 3) = NULL,
     @RightValue                    DECIMAL(18, 3) = NULL,
     @Weight                        DECIMAL(18, 3) = NULL,
     @MaxDifference                 INT = NULL,
     @ActualDifference              INT = NULL,
     @MinDeceleration               INT = NULL,
-    @ActualDeceleration            INT = NULL,
-    @Location                      INT = NULL,
-    @IsPassed                      BIT = NULL,
+    @ActualDeceleration            INT = NULL,  
     @Result                        INT OUTPUT,
     @ErrorMessage                  NVARCHAR(MAX) OUTPUT, -- This Variable Used For Validation Error Messages
     @DBErrorMessage                NVARCHAR(MAX) OUTPUT  -- This Variable Used For Database Error Messages
@@ -28,18 +24,14 @@ BEGIN
                    AND Brake_Read_Type = @BrakeReadType)
         BEGIN
             UPDATE [dbo].[Brake_Results_Log]
-            SET
-                Description_Ar = @DescriptionAr,
-                Description_En = @DescriptionEn,
+            SET 
                 Left_Value = @LeftValue,
                 Right_Value = @RightValue,
                 Weight = @Weight,
                 Max_Difference = @MaxDifference,
                 Actual_Difference = @ActualDifference,
                 Min_Deceleration = @MinDeceleration,
-                Actual_Deceleration = @ActualDeceleration,
-                Location = @Location,
-                Is_Passed = @IsPassed
+                Actual_Deceleration = @ActualDeceleration
             WHERE 
                 Request_Id = @RequestId 
                 AND Inspection_Req_Id = @InspectionReqId 
