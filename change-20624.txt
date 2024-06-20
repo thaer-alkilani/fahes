@@ -1,0 +1,93 @@
+ALTER PROCEDURE [dbo].[SP_MOI_UpdateMoiRemarks]
+    @Inspection_Req_id Int,
+	@Defect_Comment_Id Int,
+	@MoiRemarks nvarchar(max),
+    @Result INT OUTPUT,
+    @Error_Message NVARCHAR(MAX) OUTPUT
+AS
+BEGIN
+    BEGIN TRANSACTION; -- Start the transaction
+
+    BEGIN TRY
+     update Inspection_Results_Audit
+	 set moi_remarks = @MoiRemarks
+	 where Inspection_Results_Audit.Inspection_Req_id=@Inspection_Req_id 
+	 And Inspection_Results_Audit.Defect_Comment_Id = @Defect_Comment_Id;
+
+        SET @Result = @@ROWCOUNT; -- Indicate success
+    END TRY
+    BEGIN CATCH
+      DECLARE @ErrorNumber INT = ERROR_NUMBER();
+
+        -- Call the function to get the custom error message
+        SET @Error_Message = dbo.fn_Core_GetCustomErrorMessage(@ErrorNumber);
+        SET @Result = -1; -- Indicate failure
+        ROLLBACK; -- Rollback the transaction in case of an error
+        RETURN;
+    END CATCH;
+
+    COMMIT; -- Commit the transaction if everything is successful
+END;
+
+=======================================================================================================================================
+
+
+
+ALTER FUNCTION [dbo].[FN_Supervisor_GetExcludedInspectionDefects] 
+(	
+	@Request_Id			INT
+)
+RETURNS TABLE 
+AS
+RETURN 
+(
+	select distinct
+	  [DefectComment].[Def_Comment_Code]	AS	DefCommentCode,
+	   IRA.[Inspection_Req_Id] as InspectionReqId
+      ,IRA.[Request_Id] as  Request_Id
+      ,IRA.[Inspection_Service_Id] as InspectionServiceId
+	  ,IST.Service_Name as ServiceName
+      ,IRA.[Section_Id] as SectionId
+	  ,SD.Section_Name as SectionName
+      ,IRA.[Defect_Mode] as DefectMode
+      ,IRA.[Defect_Comment_Id] as DefectCommentId,
+		[DefectComment].[Description_En]											AS  DefectCommentDescriptionEn,
+		[DefectComment].[Description_Ar]											AS  DefectCommentDescriptionAr ,
+		[Defect_Main_Category].Defect_Name_En										AS  MainCatrgoryDefectDescriptionEn,
+		[Defect_Main_Category].Defect_Name_Ar										AS  MainCatrgoryDefectDescriptionAR,
+		[Defect_Sub_Category].Description_En										AS  SubCatrgoryDefectDescriptionEn,
+		[Defect_Sub_Category].Description_Ar										AS  SubCatrgoryDefectDescriptionAr
+      ,IRA.[Defect_Classification] as DefectClassificationId
+      ,IRA.MOI_REMARKS AS Remarks
+      ,IRA.[Status] 
+      ,IRA.[Evalution_Id] as EvalutionId
+      ,IRA.[Location]
+      ,IRA.[Axle] 
+      ,IRA.[Created_Date]  as CreatedDate
+	  ,IRA.Created_By as CreatedBy 
+	  ,[dbo].[Fn_Core_Get_LookUp](50, IRA.Defect_Classification)			 AS DefectClassification
+	  ,[dbo].[Fn_Core_Get_LookUp](29, IRA.Evalution_Id)						 AS Evalution
+	  ,[dbo].[FN_MOI_CheckDefectHasFiles](IRA.Defect_Comment_Id , IRA.Request_Id) as HasFiles
+	  ,[dbo].[FN_Inspection_FindDefectLocations](IRA.[Location])	AS  ExcludedDefectLocation
+
+
+  FROM  [dbo].[Inspection_Results_Audit] IRA
+  inner join Inspection_Service_Types IST on
+  IST.Service_Id = IRA.Inspection_Service_Id
+  inner join Section_Def SD on 
+  SD.Section_Id = IRA.Section_Id
+  inner join Defect_Comments DC  on 
+  DC.Def_Comment_Id = IRA.Defect_Comment_Id
+  INNER JOIN 
+	Defect_Comments DefectComment ON  IRA.Defect_Comment_Id = DefectComment.Def_Comment_Id
+  INNER JOIN 
+	[dbo].[Defect_Main_Category] ON
+		DefectComment.Main_Defects_Id = Defect_Main_Category.Main_Defect_Id
+INNER JOIN 
+	[dbo].[Defect_Sub_Category]  ON
+		DefectComment.Sub_Defect_Id = Defect_Sub_Category.Sub_Defect_Id
+
+  WHERE IRA.Request_Id = @Request_Id and IRA.Operation_Type = 'D'
+)
+
+ 
