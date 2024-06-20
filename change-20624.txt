@@ -90,4 +90,155 @@ INNER JOIN
   WHERE IRA.Request_Id = @Request_Id and IRA.Operation_Type = 'D'
 )
 
+ ==========================================================================================================================================================
+
+ALTER PROCEDURE [dbo].[SP_Inspection_ResetInspectionRequest]
+	@Request_Id							INT,
+	@Result								INT			  OUTPUT,
+	@Error_Message						NVARCHAR(MAX) OUTPUT,--This Variable Used For Validation Error Messages
+	@DB_Error_Message					NVARCHAR(MAX) OUTPUT--This Variable Used For Database Error Messages
+AS
+BEGIN
+	SET NOCOUNT ON;
+
+	BEGIN TRY 
+	-- Reset the status of the request tables (service_request | inspection_request to pending)
+	UPDATE Service_Request SET [Status] = 3 WHERE Request_Id = @Request_Id;
+	UPDATE Inspection_Request SET [Status] = 1 WHERE Request_Id = @Request_Id;
+
+	--Delete any record related to the inspection (devices | manual testing)
+	DELETE FROM [Inspection_Request_Evaluation] WHERE Request_Id = @Request_Id;
+	DELETE FROM [Inspection_Results] WHERE Request_Id = @Request_Id;
+	DELETE FROM [dbo].[Inspection_Results_Audit] WHERE Request_Id = @Request_Id;
+	DELETE FROM [Brake_Reads_Log] WHERE Request_Id = @Request_Id;
+	DELETE FROM [Brake_Results_Log] WHERE Request_Id = @Request_Id;
+	DELETE FROM [Exhaust_Emiss_Results_Log] WHERE Request_Id = @Request_Id;
+	DELETE FROM [Inspection_Steps] WHERE Request_Id = @Request_Id;
+	DELETE FROM [dbo].[Inspection_Request_Config] WHERE Request_Id = @Request_Id;
+
+	SET @Result =@@ROWCOUNT;
+	END TRY
+	BEGIN CATCH 
+	SET @DB_Error_Message = ERROR_MESSAGE(); 
+	END CATCH
+
+
+
+END
+
+
+===========================================================================================================================
+
+USE [FAHESVIS]
+GO
+/****** Object:  StoredProcedure [dbo].[SP_Inspection_DeleteInspectionDefect]    Script Date: 6/20/2024 3:16:51 PM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+-- =============================================
+-- Author:		<Thaer Alkilani>
+-- Create date: <2/11/2024> 
+-- Description:	<delete inspection defects>
+-- =============================================
+ALTER PROCEDURE [dbo].[SP_Inspection_DeleteInspectionDefect]
  
+    @Inspection_Req_Id          INT , 
+	@Defect_Comment_Id			INT , 
+    @Result                     INT OUTPUT,
+    @Error_Message              NVARCHAR(MAX) OUTPUT,
+	@DB_Error_Message			NVARCHAR(MAX) OUTPUT
+AS
+BEGIN
+     SET NOCOUNT ON;  
+  
+    BEGIN TRANSACTION;  
+
+    -- Insert into Inspection_Results  table
+
+	delete from [dbo].[Inspection_Results]  where  
+	Inspection_Req_Id = @Inspection_Req_Id and
+	Defect_Comment_Id = @Defect_Comment_Id;
+	SET @Result = 1;
+
+     IF @@ERROR <> 0  
+    BEGIN  
+        SET @Result = @@ROWCOUNT;  
+		SET @DB_Error_Message= ERROR_MESSAGE();
+        ROLLBACK;  
+        RETURN;  
+    END  
+  
+    COMMIT;  
+  
+    SET @Result = 1; -- Success  
+    RETURN;  
+END
+
+
+=============================================================================================================================
+
+
+ALTER FUNCTION [dbo].[FN_MOI_GetExcludedInspectionDefects] 
+(	
+	@Request_Id			INT
+)
+RETURNS TABLE 
+AS
+RETURN 
+(
+	select distinct
+	  [DefectComment].[Def_Comment_Code]	AS	DefCommentCode,
+	   IRA.[Inspection_Req_Id] as InspectionReqId
+      ,IRA.[Request_Id] as  Request_Id
+      ,IRA.[Inspection_Service_Id] as InspectionServiceId
+	  ,IST.Service_Name as ServiceName
+      ,IRA.[Section_Id] as SectionId
+	  ,SD.Section_Name as SectionName
+      ,IRA.[Defect_Mode] as DefectMode
+      ,IRA.[Defect_Comment_Id] as DefectCommentId,
+		[DefectComment].[Description_En]											AS  DefectCommentDescriptionEn,
+		[DefectComment].[Description_Ar]											AS  DefectCommentDescriptionAr ,
+		[Defect_Main_Category].Defect_Name_En										AS  MainCatrgoryDefectDescriptionEn,
+		[Defect_Main_Category].Defect_Name_Ar										AS  MainCatrgoryDefectDescriptionAR,
+		[Defect_Sub_Category].Description_En										AS  SubCatrgoryDefectDescriptionEn,
+		[Defect_Sub_Category].Description_Ar										AS  SubCatrgoryDefectDescriptionAr
+      ,IRA.[Defect_Classification] as DefectClassificationId
+      ,IRA.MOI_REMARKS AS Remarks
+      ,IRA.[Status] 
+      ,IRA.[Evalution_Id] as EvalutionId
+      ,IRA.[Location]
+      ,IRA.[Axle] 
+      ,IRA.[Created_Date]  as CreatedDate
+	  ,IRA.Created_By as CreatedBy 
+	  ,[dbo].[Fn_Core_Get_LookUp](50, IRA.Defect_Classification)			 AS DefectClassification
+	  ,[dbo].[Fn_Core_Get_LookUp](29, IRA.Evalution_Id)						 AS Evalution
+	  ,[dbo].[FN_MOI_CheckDefectHasFiles](IRA.Defect_Comment_Id , IRA.Request_Id) as HasFiles
+	  ,[dbo].[FN_Inspection_FindDefectLocations](IRA.[Location])	AS  ExcludedDefectLocation
+
+
+  FROM  [dbo].[Inspection_Results_Audit] IRA
+  inner join Inspection_Service_Types IST on
+  IST.Service_Id = IRA.Inspection_Service_Id
+  inner join Section_Def SD on 
+  SD.Section_Id = IRA.Section_Id
+  inner join Defect_Comments DC  on 
+  DC.Def_Comment_Id = IRA.Defect_Comment_Id
+  INNER JOIN 
+	Defect_Comments DefectComment ON  IRA.Defect_Comment_Id = DefectComment.Def_Comment_Id
+  INNER JOIN 
+	[dbo].[Defect_Main_Category] ON
+		DefectComment.Main_Defects_Id = Defect_Main_Category.Main_Defect_Id
+INNER JOIN 
+	[dbo].[Defect_Sub_Category]  ON
+		DefectComment.Sub_Defect_Id = Defect_Sub_Category.Sub_Defect_Id
+
+INNER JOIN [dbo].[Users_Roles] UR ON
+	UR.User_Id = IRA.Created_By
+
+  WHERE IRA.Request_Id = @Request_Id and IRA.Operation_Type = 'D' and
+  UR.Role_Id in (2, 16, 17)
+)
+
+
+=============================================================================================================================================
