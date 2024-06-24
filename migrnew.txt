@@ -1,0 +1,998 @@
+USE [FAHESVIS]
+GO
+/****** Object:  StoredProcedure [dbo].[SP_Migration_CopyFromQdriveSystem]    Script Date: 6/24/2024 10:54:06 AM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+ALTER PROCEDURE [dbo].[SP_Migration_CopyFromQdriveSystem]
+AS
+BEGIN
+    -- Begin a transaction
+    BEGIN TRANSACTION;
+
+    DECLARE @Error INT,
+	@NewReqId int,
+	@NewInvoiceId int,
+	@NewAttempId int,
+	@NewInsReqId INT,
+	@NewStep1Id INT,
+	@newStep2Id INT,
+	@newStep3Id INT;
+
+	DECLARE @InsertedInsResultsLogs TABLE (
+    NewInspectionResultId INT,
+    InsStepId INT
+);
+
+
+
+    SET @Error = 0; -- Initialize error flag
+
+
+    -- Declare variables to hold QDrive data
+    DECLARE @QDriveID bigint;
+    DECLARE @VIN varchar(50);
+    DECLARE @Plate_No varchar(50);
+    DECLARE @Plate_Type int;
+    DECLARE @Color_Id int;
+    DECLARE @Category_Id int;
+    DECLARE @PID varchar(50);
+    DECLARE @StationID int;
+    DECLARE @QNumber int;
+    DECLARE @QTime int;
+    DECLARE @Payment_Type int;
+    DECLARE @Fee decimal(18,2);
+    DECLARE @Inspection_Type int;
+    DECLARE @InsertedBy int;
+    DECLARE @InsertedOn int;
+    DECLARE @Mileage int;
+    DECLARE @SSA1 varchar(50);
+    DECLARE @SSA2 varchar(50);
+    DECLARE @SSA3 varchar(50);
+    DECLARE @SSA4 varchar(50);
+    DECLARE @SSA5 varchar(50);
+    DECLARE @SSA6 varchar(50);
+    DECLARE @SSA7 varchar(50);
+    DECLARE @SSA8 varchar(50);
+    DECLARE @SSA9 varchar(50);
+    DECLARE @AW1 varchar(50);
+    DECLARE @AW2 varchar(50);
+    DECLARE @AW3 varchar(50);
+    DECLARE @AW4 varchar(50);
+    DECLARE @AW5 varchar(50);
+    DECLARE @AW6 varchar(50);
+    DECLARE @AW7 varchar(50);
+    DECLARE @AW8 varchar(50);
+    DECLARE @AW9 varchar(50);
+    DECLARE @CO varchar(50);
+    DECLARE @HC varchar(50);
+    DECLARE @Smoke_Density varchar(50);
+    DECLARE @BFFAR varchar(50);
+    DECLARE @BFFAL varchar(50);
+    DECLARE @BFRAR varchar(50);
+    DECLARE @BFRAL varchar(50);
+    DECLARE @BF3R varchar(50);
+    DECLARE @BF3L varchar(50);
+    DECLARE @BF4R varchar(50);
+    DECLARE @BF4L varchar(50);
+    DECLARE @BF5R varchar(50);
+    DECLARE @BF5L varchar(50);
+    DECLARE @BF6R varchar(50);
+    DECLARE @BF6L varchar(50);
+    DECLARE @BF7R varchar(50);
+    DECLARE @BF7L varchar(50);
+    DECLARE @BF8R varchar(50);
+    DECLARE @BF8L varchar(50);
+    DECLARE @BF9R varchar(50);
+    DECLARE @BF9L varchar(50);
+    DECLARE @PB1R varchar(50);
+    DECLARE @PB1L varchar(50);
+    DECLARE @PB2R varchar(50);
+    DECLARE @PB2L varchar(50);
+    DECLARE @PB3R varchar(50);
+    DECLARE @PB3L varchar(50);
+    DECLARE @PB4R varchar(50);
+    DECLARE @PB4L varchar(50);
+    DECLARE @PB5R varchar(50);
+    DECLARE @PB5L varchar(50);
+    DECLARE @PB6R varchar(50);
+    DECLARE @PB6L varchar(50);
+    DECLARE @PB7R varchar(50);
+    DECLARE @PB7L varchar(50);
+    DECLARE @PB8R varchar(50);
+    DECLARE @PB8L varchar(50);
+    DECLARE @PB9R varchar(50);
+    DECLARE @PB9L varchar(50);
+    DECLARE @Eval_SS varchar(50);
+    DECLARE @Eval_BS varchar(50);
+    DECLARE @Eval_Exhaust varchar(50);
+    DECLARE @Test_Begin_Section1 int;
+    DECLARE @Test_End_Section1 int;
+    DECLARE @Test_Begin_Section2 int;
+    DECLARE @Test_End_Section2 int;
+    DECLARE @Test_Begin_Section3 int;
+    DECLARE @Test_End_Section3 int;
+    DECLARE @Lane_No int;
+    DECLARE @Inspector_ID int;
+    DECLARE @Final_Eval int;
+    DECLARE @Inspected_On int
+    DECLARE @Report_By int;
+    DECLARE @Report_On int
+    DECLARE @Cancelled_By int;
+    DECLARE @Cancelled_On int
+    DECLARE @Cancelled_At int
+    DECLARE @Migration_Status bit;
+	DECLARE @OLD_REQ_ID INT =-1;
+	DECLARE @OLD_INS_REQ_ID INT =-1;
+	DECLARE @P_Fullname varchar(max);
+	DECLARE @phone varchar(max),
+	@manufacturer_id int,
+		@car_model_id int,
+		@cylinders int,
+		@year_manufactint int,
+		@joinP bigint;
+
+
+
+    -- Declare cursor to iterate over QDrive_Inspection
+    DECLARE QDriveCursor CURSOR FOR
+    SELECT top 3
+        a.[id],
+        [vin],
+       a. [license_plate],
+        a.[license_plate_type_id],
+        a.[color_id],
+        a.[car_category_id],
+        [pid],
+        [station_id],
+        [q_number],
+        [q_time],
+        [payment_type],
+        [fee],
+        [inspection_type],
+        a.[inserted_by],
+        a.[inserted_on],
+        [mileage],
+        [ssa1],
+        [ssa2],
+        [ssa3],
+        [ssa4],
+        [ssa5],
+        [ssa6],
+        [ssa7],
+        [ssa8],
+        [ssa9],
+        [aw1],
+        [aw2],
+        [aw3],
+        [aw4],
+        [aw5],
+        [aw6],
+        [aw7],
+        [aw8],
+        [aw9],
+        [co],
+        [hc],
+        [smoke_density],
+        [bffar],
+        [bffal],
+        [bfrar],
+        [bfral],
+        [bf3r],
+        [bf3l],
+        [bf4r],
+        [bf4l],
+        [bf5r],
+        [bf5l],
+        [bf6r],
+        [bf6l],
+        [bf7r],
+        [bf7l],
+        [bf8r],
+        [bf8l],
+        [bf9r],
+        [bf9l],
+        [pb1r],
+        [pb1l],
+        [pb2r],
+        [pb2l],
+        [pb3r],
+        [pb3l],
+        [pb4r],
+        [pb4l],
+        [pb5r],
+        [pb5l],
+        [pb6r],
+        [pb6l],
+        [pb7r],
+        [pb7l],
+        [pb8r],
+        [pb8l],
+        [pb9r],
+        [pb9l],
+        [eval_ss],
+        [eval_bs],
+        [eval_exhaust],
+        [test_begin_section1],
+        [test_end_section1],
+        [test_begin_section2],
+        [test_end_section2],
+        [test_begin_section3],
+        [test_end_section3],
+        [lane_no],
+        [inspector_id],
+       case [final_eval] when 0 then 1
+	   else final_eval end as final_eval ,
+        [inspected_on],
+        [report_by],
+        [report_on],
+        [cancelled_by],
+        [cancelled_on],
+        [cancelled_at],
+        a.is_imported,
+		isnull(c.fname + c.lname ,'') as fullname,
+		isnull(c.phone ,0) phone ,
+		rv.car_manufacturer_id,
+		rv.car_model_id,
+		rv.cylinders,
+		rv.year_manufact,
+		jp.id as jointPatrol
+    FROM
+       QDRIVE_FAHES_VIS_SYNC.dbo.[q2d_qdrive_inspection] a
+	   inner join  QDRIVE_FAHES_VIS_SYNC.dbo.[q2d_qdrive_person] c on a.pid = c.id
+	   inner join QDRIVE_FAHES_VIS_SYNC.[dbo].[q2d_qdrive_vehicle] RV on rv.id = a.vin
+	   left join  QDRIVE_FAHES_VIS_SYNC.[dbo].q2d_qdrive_inspection_joint_patrol jp on jp.id = a.id
+	  
+	;
+
+    OPEN QDriveCursor;
+    FETCH NEXT FROM QDriveCursor INTO @QDriveID, @VIN, @Plate_No, @Plate_Type, @Color_Id, @Category_Id, @PID, @StationID, @QNumber, @QTime, @Payment_Type, @Fee, @Inspection_Type, @InsertedBy, @InsertedOn, @Mileage, @SSA1, @SSA2, @SSA3, @SSA4, @SSA5, @SSA6, @SSA7, @SSA8, @SSA9, @AW1, @AW2, @AW3, @AW4, @AW5, @AW6, @AW7, @AW8, @AW9, @CO, @HC, @Smoke_Density, @BFFAR, @BFFAL, @BFRAR, @BFRAL, @BF3R, @BF3L, @BF4R, @BF4L, @BF5R, @BF5L, @BF6R, @BF6L, @BF7R, @BF7L, @BF8R, @BF8L, @BF9R, @BF9L, @PB1R, @PB1L, @PB2R, @PB2L, @PB3R, @PB3L, @PB4R, @PB4L, @PB5R, @PB5L, @PB6R, @PB6L, @PB7R, @PB7L, @PB8R, @PB8L, @PB9R, @PB9L, @Eval_SS, @Eval_BS, @Eval_Exhaust, @Test_Begin_Section1, @Test_End_Section1, @Test_Begin_Section2, @Test_End_Section2, @Test_Begin_Section3, @Test_End_Section3, @Lane_No, @Inspector_ID, @Final_Eval, @Inspected_On, @Report_By, @Report_On, @Cancelled_By, @Cancelled_On, @Cancelled_At,@Migration_Status,@P_Fullname,@phone ,@manufacturer_id,
+		@car_model_id ,
+		@cylinders ,
+		@year_manufactint ,
+		@joinP
+ ;
+
+    -- Loop through QDrive data
+    WHILE @@FETCH_STATUS = 0
+    BEGIN
+        -- Step 1: Insert data from QDrive_Inspection into Service_Request
+        PRINT('-----   Insert Service Request  -------');
+		print(@QDriveID);
+		print(@car_model_id);
+		print(@year_manufactint);
+		print(@joinP);
+		---- check if its updatin
+		SELECT @OLD_REQ_ID =Request_Id,
+		@OLD_INS_REQ_ID =Inspection_Req_Id FROM Inspection_Request
+		WHERE FAHES_Receipt_No =TRY_CAST(@QDriveID as nvarchar(4000));
+	--	print('old req id' );
+		--print( @OLD_REQ_ID);
+		--print('old INS_REQ_ID' );
+	--	print(@old_INS_REQ_ID);
+		 
+	if @OLD_REQ_ID =-1 begin 
+	print('inserting')
+
+        INSERT INTO [dbo].[Service_Request] (
+            Request_Date,
+            Station_Id,
+            Service_Type,
+            Contact_Type,
+            Contact_Person_Name,
+            Contact_Person_Email,
+            Contact_Person_Phone,
+            Status,
+            Registration_Source,
+            Created_By,
+            Created_Date
+        )
+
+        -- Data to be inserted comes from QDrive_Inspection
+        VALUES (
+            dbo.ConvertUnixTimeToQatarTime(@InsertedOn),
+            @StationID,
+            1, -- service_type
+            1,
+         @P_Fullname  ,
+            NULL,
+            @phone,
+            8,
+            2,
+            @InsertedBy,
+             dbo.ConvertUnixTimeToQatarTime(@InsertedOn)
+        );
+		set @NewReqId = SCOPE_IDENTITY();
+	
+
+	 	
+
+		 -- Step 3: Insert into Register_Vehicle
+        PRINT('-----   Insert into Register_Vehicle  -------');
+        INSERT INTO [dbo].[Register_Vehicle] (
+            [Request_Id],
+            [Plate_No],
+            [Plate_Type],
+            [VIN_No],
+            [Color_Id],
+            [Category_Id],
+            [Owner_Type],
+            [Owner_PID],
+            [Created_By],
+            [Created_Date],
+            Manufacturer_Id,
+            Manufacturer_Year,
+            Cylinders,
+            Contact_Person_Phone
+        )
+        VALUES (
+            @NewReqId, -- Get the last inserted identity value
+            @Plate_No,
+            @Plate_Type,
+            @VIN,
+            @Color_Id,
+            @Category_Id,
+            1,
+            @PID,
+            @InsertedBy,
+               dbo.ConvertUnixTimeToQatarTime(@InsertedOn),
+            @manufacturer_id,
+            @year_manufactint,
+            @cylinders,
+            @phone
+        );
+
+
+	
+		-------------------------------------------insert inspection request ----------------------------------------------------------------------------------------------
+		INSERT INTO 
+		DBO.Inspection_Request (
+		Request_Id ,
+		FAHES_Receipt_No,
+		Inspection_Service_Id,
+		Plate_No,
+		Plate_Type,
+		VIN_No,
+		Inspection_Start,
+		Inspection_End,
+		Inspection_Type,
+		Final_Result,
+		Status,
+		Remarks,
+		Created_By,
+		Created_Date,
+		Actual_Lane_Id
+		)
+		values(
+
+		@NewReqId,
+		@QDriveID,
+		case when @joinP is not null then 5 else 1 end,
+		@Plate_No,
+		@Plate_Type,
+		@VIN,
+		 dbo.ConvertUnixTimeToQatarTime(@Test_Begin_Section1),
+		 dbo.ConvertUnixTimeToQatarTime(isnull(@Test_End_Section3,isnull(@Test_Begin_Section2,@Test_Begin_Section1))),
+		 1,
+		 @Final_Eval,
+		 3,
+		 null,
+		 	 @Inspector_ID,
+		  dbo.ConvertUnixTimeToQatarTime(@Inspected_On),
+		  1
+		
+		)
+
+		SET @NewInsReqId =SCOPE_IDENTITY();
+				end; -- end of if old
+	else
+	begin
+	print ('updates');
+	set @NewReqId =@OLD_REQ_ID;
+	set @NewInsReqId = @OLD_INS_REQ_ID;
+
+	--- update the inspection reqs
+	
+
+
+
+		--print(@x);
+		--print(@Final_Eval);
+
+		update
+		DBO.Inspection_Request
+		set
+		Inspection_Start =dbo.ConvertUnixTimeToQatarTime(@Test_Begin_Section1),
+		Inspection_End = dbo.ConvertUnixTimeToQatarTime(isnull(@Test_End_Section3,isnull(@Test_Begin_Section2,@Test_Begin_Section1))),
+		Final_Result = @Final_Eval,
+		Status = 1 ,
+		Inspection_Service_Id =case when @joinP is not null then 5 else 1 end
+		where Request_Id = @NewReqId
+		and Inspection_Req_Id = @NewInsReqId
+	   ;
+		
+
+
+
+
+
+	-----------------------------------------------------------
+	end; -- end else of old if
+	if not  exists ( select 1 from dbo.Invoice_Details  where Request_Id= @NewReqId) begin
+	print('exists')
+
+		insert into dbo.Request_Invoice 
+		(
+		Request_Invoice_Date,
+		Total_Amount,
+		Created_By,
+		Created_Date,
+		Total_Discount,
+		Status
+		)
+		values(
+		 dbo.ConvertUnixTimeToQatarTime(@InsertedOn),
+		case when @Fee <0 then 0 else @Fee end,
+		  @InsertedBy,
+		   dbo.ConvertUnixTimeToQatarTime(@InsertedOn),
+		  case when @Fee <0 then abs(@Fee) else 0 end,
+		   3
+
+		);
+
+		set @NewInvoiceId = SCOPE_IDENTITY();
+
+
+
+		insert into dbo.Invoice_Details 
+		(
+		Invoice_Id,
+		Request_Id,
+		Sub_Amount,
+		Sub_Discount,
+		Created_By,
+		Created_Date
+		
+		)
+		values(
+		@NewInvoiceId,
+		@NewReqId,
+		case when @Fee <0 then 0 else @Fee end,
+		 case when @Fee <0 then abs(@Fee) else 0 end,
+		 @InsertedBy,
+		  dbo.ConvertUnixTimeToQatarTime(@InsertedOn)
+		);
+	
+
+
+	
+		--------------- insert recipt ---------------------------
+		insert Receipt
+		( Total_Amount ,
+		Payment_Method,
+		Invoice_Id, 
+		Created_By,
+		Created_Date
+		)
+		values(
+		case when @Fee <0 then 0 else @Fee end,
+		@Payment_Type,
+		 @NewInvoiceId,
+		
+		 @InsertedBy,
+		  dbo.ConvertUnixTimeToQatarTime(@InsertedOn)
+		);
+
+
+			------------------------ card -------------
+
+		insert into Payment_Attempted (Invoice_Id,POS_Id,Amount,Created_By,Created_Date)
+	SELECT  @NewInvoiceId,
+	1,
+	case  when fee <0 then 0 else fee  end fee,
+	inserted_by,
+	 dbo.ConvertUnixTimeToQatarTime(inserted_at) 
+	
+  FROM [QDRIVE_FAHES_VIS_SYNC].[dbo].[q2d_qdrive_inspection_card]
+  where id =@QDriveID;
+ set @NewAttempId = SCOPE_IDENTITY();
+
+ insert into dbo.Payment_Result(Attempt_Id,Invoice_Id,POS_Id,Card_No,Auth_Code,RRN,Created_By,Created_Date)
+ select @NewAttempId,@NewInvoiceId,1,card_number,authorization_number,reference_number,inserted_by, dbo.ConvertUnixTimeToQatarTime(inserted_at) 
+ from [QDRIVE_FAHES_VIS_SYNC].[dbo].[q2d_qdrive_inspection_card]
+  where id =@QDriveID;
+
+
+  
+------------------------------------------------
+	
+
+
+
+		end;
+		------------------------------------------------------------------------------------------------------------------------
+
+		
+		--------------------------------------------------------------------------------------------------------
+
+		--------------------------------------- inspection steps --------------------------------
+		 declare @recCount int;
+	  select @recCount = count(*) from [dbo].[Inspection_Steps] where Inspection_Req_Id =@OLD_INS_REQ_ID
+		and Request_Id =@OLD_REQ_ID;
+		--- step one
+		
+		if (@Test_Begin_Section1 is not null  and @Test_Begin_Section1 <>0) begin 
+		print('not null');
+		print (@OLD_INS_REQ_ID);
+		print(@OLD_REQ_ID);
+		if (@recCount<1) begin
+		print ('insert');
+		insert [dbo].[Inspection_Steps]( 
+      [Inspection_Req_Id]
+      ,[Request_Id]
+      ,[Inspection_Service_Id]
+      ,[Lane_Id]
+      ,[Section_Id]
+      ,[Step_Start]
+      ,[Step_End]
+      ,[Inspector_Id]
+      ,[Remarks])
+	  values(@NewInsReqId,
+	  @NewReqId,
+	  @Inspection_Type,
+	   1,-- to check lane
+	  1,-- to check  section  should be based on the sq. 
+	  dbo.ConvertUnixTimeToQatarTime(@Test_Begin_Section1),
+	  dbo.ConvertUnixTimeToQatarTime(@Test_End_Section1),
+	  @Inspector_ID,
+	  null --- Remarks to be checked
+	  ); 
+
+	 set @NewStep1Id =SCOPE_IDENTITY();
+	  end;
+	  else
+	  begin
+	  print ('update step 1')
+	  declare @Inspection_Step1_Id int;
+
+	  select top 1 @Inspection_Step1_Id =Inspection_Step_Id from [dbo].[Inspection_Steps] where Inspection_Req_Id =@OLD_INS_REQ_ID
+		and Request_Id =@OLD_REQ_ID;
+		  print (@Inspection_Step1_Id);
+	  update
+	  [dbo].[Inspection_Steps]
+	  set
+	  [Step_Start] =  dbo.ConvertUnixTimeToQatarTime(@Test_Begin_Section1),
+      [Step_End] = dbo.ConvertUnixTimeToQatarTime(@Test_End_Section1),
+      [Inspector_Id] =@Inspector_ID,
+      [Remarks] =null
+	    where  [dbo].[Inspection_Steps].Request_Id =@NewReqId
+	  and  [dbo].[Inspection_Steps].Inspection_Req_Id =@NewInsReqId
+	  and [dbo].[Inspection_Steps].Inspection_Step_Id = @Inspection_Step1_Id
+	  end ; -- exists
+	  end; --not nllexists
+	  
+
+
+	  ----- step 2 ---------------------
+	  if  (@Test_Begin_Section2 is not null  and @Test_Begin_Section2 <>0) begin 
+	 
+	  if (@recCount <2 )begin
+		insert [dbo].[Inspection_Steps]( 
+      [Inspection_Req_Id]
+      ,[Request_Id]
+      ,[Inspection_Service_Id]
+      ,[Lane_Id]
+      ,[Section_Id]
+      ,[Step_Start]
+      ,[Step_End]
+      ,[Inspector_Id]
+      ,[Remarks])
+	  values(@NewInsReqId,
+	  @NewReqId,
+	  @Inspection_Type,
+	   1,-- to check lane
+	  1,-- to check  section
+	  dbo.ConvertUnixTimeToQatarTime(@Test_Begin_Section2),
+	  dbo.ConvertUnixTimeToQatarTime(@Test_End_Section2),
+	  @Inspector_ID,
+	  null --- Remarks to be checked
+	  ); 
+	   set @newStep2Id =SCOPE_IDENTITY();
+	  end; -- check if exists
+	  else
+	  begin
+	  print ('update step 2')
+	   declare @Inspection_Step2_Id int;
+	   WITH CTE AS (
+        SELECT 
+            Inspection_Step_Id,
+            ROW_NUMBER() OVER (ORDER BY Inspection_Step_Id ASC) AS RowNum
+        FROM 
+            [dbo].[Inspection_Steps]
+        WHERE 
+            Inspection_Req_Id = @OLD_INS_REQ_ID
+            AND Request_Id = @OLD_REQ_ID
+    )
+    SELECT 
+        @Inspection_Step2_Id = Inspection_Step_Id
+    FROM 
+        CTE
+    WHERE 
+        RowNum = 2;
+		print (@Inspection_Step2_Id);
+	  update
+	  [dbo].[Inspection_Steps]
+	  set
+	  [Step_Start] =  dbo.ConvertUnixTimeToQatarTime(@Test_Begin_Section2),
+      [Step_End] = dbo.ConvertUnixTimeToQatarTime(@Test_End_Section2),
+      [Inspector_Id] =@Inspector_ID,
+      [Remarks] =null
+	  	  where  [dbo].[Inspection_Steps].Request_Id =@NewReqId
+	  and  [dbo].[Inspection_Steps].Inspection_Req_Id =@NewInsReqId
+	  and [dbo].[Inspection_Steps].Inspection_Step_Id = @Inspection_Step2_Id
+	  end;
+	  end;
+	  	
+		-------------------------------------------------
+		  ----- step 3 ---------------------
+	  if  (@Test_Begin_Section3 is not null  and @Test_Begin_Section3 <>0) begin 
+	  if (@recCount <3 )begin
+		insert [dbo].[Inspection_Steps]( 
+      [Inspection_Req_Id]
+      ,[Request_Id]
+      ,[Inspection_Service_Id]
+      ,[Lane_Id]
+      ,[Section_Id]
+      ,[Step_Start]
+      ,[Step_End]
+      ,[Inspector_Id]
+      ,[Remarks])
+	  values(@NewInsReqId,
+	  @NewReqId,
+	  @Inspection_Type,
+	  1,-- to check lane
+	 1,-- to check  section
+	  dbo.ConvertUnixTimeToQatarTime(@Test_Begin_Section3),
+	  dbo.ConvertUnixTimeToQatarTime(@Test_End_Section3),
+	  @Inspector_ID,
+	  null --- Remarks to be checked
+	  ); 
+	  set @newStep3Id =SCOPE_IDENTITY();
+	  end;
+	  else
+	  begin
+	   print ('update step 3')
+	  declare @Inspection_Step3_Id int;
+	   WITH CTE AS (
+        SELECT 
+            Inspection_Step_Id,
+            ROW_NUMBER() OVER (ORDER BY Inspection_Step_Id ASC) AS RowNum
+        FROM 
+            [dbo].[Inspection_Steps]
+        WHERE 
+            Inspection_Req_Id = @OLD_INS_REQ_ID
+            AND Request_Id = @OLD_REQ_ID
+    )
+    SELECT 
+        @Inspection_Step3_Id = Inspection_Step_Id
+    FROM 
+        CTE
+    WHERE 
+        RowNum = 3;
+		print (@Inspection_Step3_Id);
+	  update
+	  [dbo].[Inspection_Steps]
+	  set
+	  [Step_Start] =  dbo.ConvertUnixTimeToQatarTime(@Test_Begin_Section3),
+      [Step_End] = dbo.ConvertUnixTimeToQatarTime(@Test_End_Section3),
+      [Inspector_Id] =@Inspector_ID,
+      [Remarks] =null
+	  where  [dbo].[Inspection_Steps].Request_Id =@NewReqId
+	  and  [dbo].[Inspection_Steps].Inspection_Req_Id =@NewInsReqId
+	  and [dbo].[Inspection_Steps].Inspection_Step_Id = @Inspection_Step3_Id
+	  end;
+	  end;
+		-------------------------------------------------
+
+		---------------------- insert defect comment -------------
+	
+		--select * from [Inspection_Steps]
+		--select * from Inspection_Results
+		print('comment start')
+		MERGE INTO dbo.Inspection_Results AS target
+USING (
+    SELECT 
+        @NewStep1Id AS Inspection_Step_Id,
+        @NewInsReqId AS Inspection_Req_Id,
+        @NewReqId AS Request_Id,
+        1 AS Inspection_Service_Id,
+        1 AS Section_Id, -- section to check
+        df.Mode AS Defect_Mode, -- Defect Mode
+        df.Def_Comment_Id,
+        [dbo].[FN_Inspection_GetDefectClassification](df.Main_Defects_Id, df.Def_Comment_Id) AS Defect_Classification, -- classification
+        qiv.additional_comment AS Remarks,
+        1 AS Status,
+        CASE WHEN df.Device_Comment = 0 THEN 1 ELSE 1 END AS Defect_Source,
+        qiv.eval AS Evalution_Id,
+        qiv.location_id AS Location,
+        0 AS Axle, -- Axle not used
+        @Inspector_ID AS Created_By, -- to be checked
+        dbo.ConvertUnixTimeToQatarTime(@Test_Begin_Section1) AS Created_Date
+    FROM 
+        QDRIVE_FAHES_VIS_SYNC.dbo.q2d_qdrive_inspection_vd QIV
+    INNER JOIN 
+        dbo.Defect_Comments DF 
+    ON 
+        qiv.comment_id = REPLACE(df.Def_Comment_Code, '/', '')
+    WHERE 
+        qiv.inspection_id = @QDriveID
+) AS source
+ON target.Defect_Comment_Id = source.Def_Comment_Id
+   AND target.Inspection_Req_Id = source.Inspection_Req_Id
+   AND target.Request_Id = source.Request_Id
+WHEN MATCHED THEN
+    UPDATE SET 
+        target.Inspection_Step_Id = source.Inspection_Step_Id,
+        target.Inspection_Service_Id = source.Inspection_Service_Id,
+        target.Section_Id = source.Section_Id,
+        target.Defect_Mode = source.Defect_Mode,
+        target.Defect_Classification = source.Defect_Classification,
+        target.Remarks = source.Remarks,
+        target.Status = source.Status,
+        target.Defect_Source = source.Defect_Source,
+        target.Evalution_Id = source.Evalution_Id,
+        target.Location = source.Location,
+        target.Axle = source.Axle,
+        target.Created_By = source.Created_By,
+        target.Created_Date = source.Created_Date
+WHEN NOT MATCHED THEN
+    INSERT (
+        [Inspection_Step_Id],
+        [Inspection_Req_Id],
+        [Request_Id],
+        [Inspection_Service_Id],
+        [Section_Id],
+        [Defect_Mode],
+        [Defect_Comment_Id],
+        [Defect_Classification],
+        [Remarks],
+        [Status],
+        [Defect_Source],
+        [Evalution_Id],
+        [Location],
+        [Axle],
+        [Created_By],
+        [Created_Date]
+    )
+    VALUES (
+        source.Inspection_Step_Id,
+        source.Inspection_Req_Id,
+        source.Request_Id,
+        source.Inspection_Service_Id,
+        source.Section_Id,
+        source.Defect_Mode,
+        source.Def_Comment_Id,
+        source.Defect_Classification,
+        source.Remarks,
+        source.Status,
+        source.Defect_Source,
+        source.Evalution_Id,
+        source.Location,
+        source.Axle,
+        source.Created_By,
+        source.Created_Date
+    )
+OUTPUT inserted.Inspection_Result_Id, inserted.Inspection_Step_Id INTO @InsertedInsResultsLogs;
+
+print('comment end');
+		
+
+		--------------------- insert the device readings ---------------------------
+		--breaks
+
+	--	select * from dbo.Brake_Reads_Log
+	
+	print('breaks start')
+	--print (@NewReqId)
+	
+	MERGE INTO Brake_Reads_Log AS target
+USING (
+    SELECT 
+        @NewReqId AS Request_Id,
+        @NewInsReqId AS Inspection_Req_Id,
+        CASE ColumnName
+            WHEN 'aw1' THEN 50100
+            WHEN 'aw2' THEN 51100
+            WHEN 'aw3' THEN 52100
+            WHEN 'aw4' THEN 53100
+            WHEN 'aw5' THEN 54100
+            WHEN 'aw6' THEN 55100
+            WHEN 'aw7' THEN 56100
+            WHEN 'aw8' THEN 57100
+            WHEN 'aw9' THEN 58100
+           
+        END AS Device_Output_Code,
+      cast(ColumnValue as varchar(6)) AS Reading_Value
+    FROM 
+        QDRIVE_FAHES_VIS_SYNC.dbo.[q2d_qdrive_inspection]
+    UNPIVOT (
+        ColumnValue FOR ColumnName IN (aw1, aw2, aw3, aw4, aw5, aw6, aw7, aw8, aw9)
+    ) AS Unpvt
+    WHERE id = @QDriveID
+) AS source
+ON target.Request_Id = source.Request_Id 
+   AND target.Inspection_Req_Id = source.Inspection_Req_Id
+   AND target.Device_Output_Code = source.Device_Output_Code
+WHEN MATCHED THEN 
+    UPDATE SET 
+        target.Reading_Value = source.Reading_Value
+WHEN NOT MATCHED THEN 
+    INSERT (Request_Id, Inspection_Req_Id, Device_Output_Code, Reading_Value)
+    VALUES (source.Request_Id, source.Inspection_Req_Id, source.Device_Output_Code, source.Reading_Value);
+
+
+	
+	MERGE INTO Brake_Reads_Log AS target
+USING (
+    SELECT 
+        @NewReqId AS Request_Id,
+        @NewInsReqId AS Inspection_Req_Id,
+        CASE ColumnName
+           
+            WHEN 'pb1r' THEN 50250
+            WHEN 'pb1L' THEN 50251
+            WHEN 'pb2r' THEN 51250
+            WHEN 'pb2L' THEN 51251
+            WHEN 'pb3r' THEN 52250
+            WHEN 'pb3L' THEN 52251
+            WHEN 'pb4r' THEN 53250
+            WHEN 'pb4L' THEN 53251
+            WHEN 'pb5r' THEN 54250
+            WHEN 'pb5L' THEN 54251
+            WHEN 'pb6r' THEN 55250
+            WHEN 'pb6L' THEN 55251
+            WHEN 'pb7r' THEN 56250
+            WHEN 'pb7L' THEN 56251
+            WHEN 'pb8r' THEN 57250
+            WHEN 'pb8L' THEN 57251
+            WHEN 'pb9r' THEN 58250
+            WHEN 'pb9L' THEN 58251
+        END AS Device_Output_Code,
+      cast(ColumnValue as varchar(6)) AS Reading_Value
+    FROM 
+        QDRIVE_FAHES_VIS_SYNC.dbo.[q2d_qdrive_inspection]
+    UNPIVOT (
+        ColumnValue FOR ColumnName IN (pb1r, pb1L, pb2r, pb2L, pb3r, pb3L, pb4r, pb4L, pb5r, pb5L, pb6r, pb6L, pb7r, pb7L, pb8r, pb8L, pb9r, pb9L)
+    ) AS Unpvt
+    WHERE id = @QDriveID
+) AS source
+ON target.Request_Id = source.Request_Id 
+   AND target.Inspection_Req_Id = source.Inspection_Req_Id
+   AND target.Device_Output_Code = source.Device_Output_Code
+WHEN MATCHED THEN 
+    UPDATE SET 
+        target.Reading_Value = source.Reading_Value
+WHEN NOT MATCHED THEN 
+    INSERT (Request_Id, Inspection_Req_Id, Device_Output_Code, Reading_Value)
+    VALUES (source.Request_Id, source.Inspection_Req_Id, source.Device_Output_Code, source.Reading_Value);
+
+	print('breaks end');
+		------------------------------------------------------------------------------
+		----------how to calculate  the break results
+
+
+		----- exhust------------
+		
+	MERGE INTO Exhaust_Emiss_Results_Log AS target
+USING (
+    SELECT 
+        @NewReqId AS Request_Id,
+        @NewInsReqId AS Inspection_Req_Id,
+        CASE ColumnName
+            WHEN 'co' THEN 39000
+            WHEN 'smoke_density' THEN 38000
+            WHEN 'hc' THEN 39001
+        END AS Device_Output_Code,
+        try_cast(ColumnValue as float) AS Reading_Value
+    FROM 
+        QDRIVE_FAHES_VIS_SYNC.dbo.[q2d_qdrive_inspection]
+    UNPIVOT (
+        ColumnValue FOR ColumnName IN (co, smoke_density, hc)
+    ) AS Unpvt
+    WHERE id = @QDriveID
+) AS source
+ON target.Request_Id = source.Request_Id 
+   AND target.Inspection_Req_Id = source.Inspection_Req_Id
+   AND target.Device_Output_Code = source.Device_Output_Code
+WHEN MATCHED THEN 
+    UPDATE SET 
+        target.Reading_Value = source.Reading_Value
+WHEN NOT MATCHED THEN 
+    INSERT (Request_Id, Inspection_Req_Id, Device_Output_Code, Reading_Value)
+    VALUES (source.Request_Id, source.Inspection_Req_Id, source.Device_Output_Code, source.Reading_Value);
+-----------------------------------------
+	----------------------- service breake  --------
+	MERGE INTO Brake_Results_Log AS target
+USING (
+    SELECT 
+        @NewReqId AS Request_Id,
+        @NewInsReqId AS Inspection_Req_Id,
+        Rtype AS Brake_Read_Type,
+        Description_En,
+        Left_Value,
+        Right_Value,
+		MinDec,
+		maxDif
+    FROM Migration_Service_breake
+    WHERE id = @QDriveID
+) AS source
+ON (target.Request_Id = source.Request_Id AND target.Inspection_Req_Id = source.Inspection_Req_Id
+and target.Brake_Read_Type =source.Brake_Read_Type)
+WHEN MATCHED THEN
+    UPDATE SET
+        target.Brake_Read_Type = source.Brake_Read_Type,
+        target.Description_En = source.Description_En,
+        target.Left_Value = try_cast(source.Left_Value as decimal(18,3)),
+        target.Right_Value = try_cast(source.right_value as decimal(18,3)),
+		target.min_deceleration = source.MinDec,
+		target.max_difference = source.maxDif
+WHEN NOT MATCHED THEN
+    INSERT (Request_Id, Inspection_Req_Id, Brake_Read_Type, Description_En, Left_Value, Right_Value,min_deceleration,max_difference)
+    VALUES (source.Request_Id, source.Inspection_Req_Id, source.Brake_Read_Type, source.Description_En,try_cast(source.Left_Value as decimal(18,3)), try_cast(source.right_value as decimal(18,3)),source.MinDec,source.maxDif);
+
+
+
+
+	--------------------------------------------------
+
+
+		UPDATE QDRIVE_FAHES_VIS_SYNC.dbo.[q2d_qdrive_inspection]
+        SET is_imported = '1'-- Adjust status value as needed
+        WHERE [id] = @QDriveID;
+        
+		
+		FETCH NEXT FROM QDriveCursor INTO @QDriveID, @VIN, @Plate_No, @Plate_Type, @Color_Id, @Category_Id, @PID, @StationID, @QNumber, @QTime, @Payment_Type, @Fee, @Inspection_Type, @InsertedBy, @InsertedOn, @Mileage, @SSA1, @SSA2, @SSA3, @SSA4, @SSA5, @SSA6, @SSA7, @SSA8, @SSA9, @AW1, @AW2, @AW3, @AW4, @AW5, @AW6, @AW7, @AW8, @AW9, @CO, @HC, @Smoke_Density, @BFFAR, @BFFAL, @BFRAR, @BFRAL, @BF3R, @BF3L, @BF4R, @BF4L, @BF5R, @BF5L, @BF6R, @BF6L, @BF7R, @BF7L, @BF8R, @BF8L, @BF9R, @BF9L, @PB1R, @PB1L, @PB2R, @PB2L, @PB3R, @PB3L, @PB4R, @PB4L, @PB5R, @PB5L, @PB6R, @PB6L, @PB7R, @PB7L, @PB8R, @PB8L, @PB9R, @PB9L, @Eval_SS, @Eval_BS, @Eval_Exhaust, @Test_Begin_Section1, @Test_End_Section1, @Test_Begin_Section2, @Test_End_Section2, @Test_Begin_Section3, @Test_End_Section3, @Lane_No, @Inspector_ID, @Final_Eval, @Inspected_On, @Report_By, @Report_On, @Cancelled_By, @Cancelled_On, @Cancelled_At, @Migration_Status ,@P_fullname,@phone,@manufacturer_id,
+		@car_model_id ,
+		@cylinders ,
+		@year_manufactint ,
+		@joinP;
+		
+	end; ---end of while
+    END;
+
+    CLOSE QDriveCursor;
+    DEALLOCATE QDriveCursor;
+
+    -- Check for errors
+    IF @@ERROR <> 0
+    BEGIN
+        SET @Error = 1;
+		  CLOSE QDriveCursor;
+    DEALLOCATE QDriveCursor;
+    END
+
+    IF @Error = 0
+    BEGIN
+        -- Commit transaction
+        COMMIT TRANSACTION;
+			--  CLOSE QDriveCursor;
+   --DEALLOCATE QDriveCursor;
+        -- Return 0 to indicate success
+        RETURN 0;
+    END
+    ELSE
+    BEGIN
+	  CLOSE QDriveCursor;
+    DEALLOCATE QDriveCursor;
+        -- Roll back the transaction in case of error
+        ROLLBACK TRANSACTION;
+        RETURN 1; -- Return 1 to indicate failure
+    
+END;
+
+
+
+
+
+
