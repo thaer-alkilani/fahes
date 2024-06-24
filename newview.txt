@@ -1,0 +1,106 @@
+USE [FAHESVIS]
+GO
+
+/****** Object:  View [dbo].[Migration_Service_breake]    Script Date: 6/24/2024 11:10:54 AM ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+--INSERT INTO dbo.Brake_Results_Log (Description_En, Left_Value, Right_Value)
+ALTER view [dbo].[Migration_Service_breake] as
+SELECT 
+    'Service Break - Axle 1' AS Description_En, 
+    bffal AS Left_Value, 
+    bffar AS Right_Value,
+	1 as Rtype,
+	id,
+	45 MinDec,
+	35 maxDif
+FROM QDRIVE_FAHES_VIS_SYNC.dbo.q2d_qdrive_inspection
+UNION ALL
+SELECT 
+    'Service Break - Axle 2' AS Description_En, 
+    bfral AS Left_Value, 
+    bfrar AS Right_Value,
+	2 as Rtype,
+	id,
+	35 MinDec,
+	40 maxDif
+FROM QDRIVE_FAHES_VIS_SYNC.dbo.q2d_qdrive_inspection
+UNION ALL
+SELECT 
+    'Service Break - Axle 3' AS Description_En, 
+    bf3l AS Left_Value, 
+    bf3r AS Right_Value,
+	3 as Rtype,
+	id,
+	45 MinDec,
+	35 maxDif
+FROM QDRIVE_FAHES_VIS_SYNC.dbo.q2d_qdrive_inspection
+union all 
+
+SELECT 
+    'Service Break - Axle 4' AS Description_En, 
+    bf4l AS Left_Value, 
+    bf4r AS Right_Value,
+	4 as Rtype,
+	id,
+	35 MinDec,
+	40 maxDif
+FROM QDRIVE_FAHES_VIS_SYNC.dbo.q2d_qdrive_inspection
+union all 
+SELECT 
+    'Service Break - Axle 5' AS Description_En, 
+    bf5l AS Left_Value, 
+    bf5r AS Right_Value,
+	5 as Rtype,
+	id,
+	45 MinDec,
+	35 maxDif
+FROM QDRIVE_FAHES_VIS_SYNC.dbo.q2d_qdrive_inspection
+union all 
+SELECT 
+    'Service Break - Axle 6' AS Description_En, 
+    bf6l AS Left_Value, 
+    bf6r AS Right_Value,
+	6 as Rtype,
+	id,
+	35 MinDec,
+	40 maxDif
+FROM QDRIVE_FAHES_VIS_SYNC.dbo.q2d_qdrive_inspection
+union all 
+SELECT 
+    'Service Break - Axle 7' AS Description_En, 
+    bf7l AS Left_Value, 
+    bf7r AS Right_Value,
+	7 as Rtype,
+	id,
+	45 MinDec,
+	35 maxDif
+FROM QDRIVE_FAHES_VIS_SYNC.dbo.q2d_qdrive_inspection
+union all 
+SELECT 
+    'Service Break - Axle 8' AS Description_En, 
+    bf8l AS Left_Value, 
+    bf8r AS Right_Value,
+	8 as Rtype,
+	id,
+	35 MinDec,
+	40 maxDif
+FROM QDRIVE_FAHES_VIS_SYNC.dbo.q2d_qdrive_inspection
+union all 
+SELECT 
+    'Service Break - Axle 9' AS Description_En, 
+    bf9l AS Left_Value, 
+    bf9r AS Right_Value,
+	9 as Rtype,
+	id,
+	45 MinDec,
+	35 maxDif
+FROM QDRIVE_FAHES_VIS_SYNC.dbo.q2d_qdrive_inspection
+GO
+
+
