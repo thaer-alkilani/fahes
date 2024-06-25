@@ -1,0 +1,146 @@
+USE [FAHESVIS]
+GO
+/****** Object:  StoredProcedure [dbo].[SP_Migration_CopyMasterToQDrive]    Script Date: 6/25/2024 3:06:28 PM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+ALTER PROCEDURE [dbo].[SP_Migration_CopyMasterToQDrive]
+AS
+BEGIN
+    -- Begin a transaction
+    BEGIN TRANSACTION;
+
+    DECLARE @Error INT;
+    
+    PRINT '------------------------sync manufacturer ----------';
+    
+    -- Ensure the previous statement ends with a semicolon
+    ;WITH RankedCTE AS (
+        SELECT 
+            Manufacturers_Id,
+            Manufacturers_Ename,
+            ROW_NUMBER() OVER (PARTITION BY Manufacturers_Ename ORDER BY Manufacturers_Id) AS rn,
+            COUNT(*) OVER (PARTITION BY Manufacturers_Ename) AS cnt
+        FROM Manufacturers
+    )
+    MERGE INTO [QDRIVE_FAHES_VIS_SYNC].[dbo].[d2q_qdrive_vehicle_manufacturer] AS target
+    USING (
+        SELECT 
+            Manufacturers_Id,
+            CASE 
+                WHEN cnt > 1 AND rn > 1 THEN CONCAT(Manufacturers_Ename, '(', Manufacturers_Id, ')')
+                ELSE Manufacturers_Ename
+            END AS name,
+            dbo.ConvertQatarTimeToUnix(GETDATE()) AS inserted_on,
+            0 AS is_imported
+        FROM 
+            RankedCTE
+    ) AS source
+    ON target.id = source.Manufacturers_Id
+    WHEN MATCHED AND 
+        (target.name_en <> source.name) THEN
+        UPDATE SET 
+            target.name_en = source.name,
+            target.inserted_on = source.inserted_on,
+            target.is_imported = source.is_imported
+    WHEN NOT MATCHED BY TARGET THEN
+        INSERT (id, name_en, inserted_on, is_imported)
+        VALUES (source.Manufacturers_Id, source.name, source.inserted_on, source.is_imported);
+		PRINT '------------------------ end sync manufacturer ----------';
+		PRINT '------------------------ Start sync vehicle_model ----------';
+		   WITH RankedCTE AS (
+    SELECT 
+        Model_Id,
+        Model_Ename,
+        ROW_NUMBER() OVER (PARTITION BY Model_Ename ORDER BY Model_Id) AS rn,
+        COUNT(*) OVER (PARTITION BY Model_Ename) AS cnt
+    FROM Vehicle_Models
+)
+MERGE INTO [QDRIVE_FAHES_VIS_SYNC].[dbo].[d2q_qdrive_vehicle_model] AS target
+USING (
+    SELECT 
+        Model_Id,
+        CASE 
+            WHEN cnt > 1 AND rn > 1 THEN CONCAT(Model_Ename, '(', Model_Id, ')')
+            ELSE Model_Ename
+        END AS name,
+        dbo.ConvertQatarTimeToUnix(GETDATE()) AS inserted_on,
+        0 AS is_imported
+    FROM 
+        RankedCTE
+) AS source
+ON target.id = source.Model_Id
+WHEN MATCHED AND 
+    (target.name_en <> source.name) THEN
+    UPDATE SET 
+        target.name_en = source.name,
+        target.inserted_on = source.inserted_on,
+        target.is_imported = source.is_imported
+WHEN NOT MATCHED BY TARGET THEN
+    INSERT (id, name_en, inserted_on, is_imported)
+    VALUES (source.Model_Id, source.name, source.inserted_on, source.is_imported);
+
+	PRINT '------------------------ end sync vehicle_model ----------';
+
+	PRINT '------------------------ Start sync Color ----------';
+		WITH RankedCTE AS (
+    SELECT 
+        id,
+        engdesc,
+        ROW_NUMBER() OVER (PARTITION BY engdesc ORDER BY id) AS rn,
+        COUNT(*) OVER (PARTITION BY engdesc) AS cnt
+    FROM  [dbo].[MST_MOI_Shape_Color]
+)
+MERGE INTO [QDRIVE_FAHES_VIS_SYNC].[dbo].[d2q_qdrive_vehicle_color] AS target
+USING (
+    SELECT 
+    id,
+    CASE 
+        WHEN cnt > 1 AND rn > 1 THEN CONCAT(engdesc, '(', id, ')')
+        ELSE engdesc
+    END AS name,
+        dbo.ConvertQatarTimeToUnix(GETDATE()) AS inserted_on,
+        0 AS is_imported
+    FROM 
+        RankedCTE
+) AS source
+ON target.id = source.id
+WHEN MATCHED AND 
+    (target.name_en <> source.name) THEN
+    UPDATE SET 
+        target.name_en = source.name,
+        target.inserted_on = source.inserted_on,
+        target.is_imported = source.is_imported
+WHEN NOT MATCHED BY TARGET THEN
+    INSERT (id, name_en, inserted_on, is_imported)
+    VALUES (source.id, source.name, source.inserted_on, source.is_imported);
+
+	PRINT '------------------------ end sync Color ----------';
+
+
+
+    -- Check for errors
+    IF @@ERROR <> 0
+    BEGIN
+        SET @Error = 1;
+    END
+    ELSE
+    BEGIN
+        SET @Error = 0;
+    END
+
+    IF @Error = 0
+    BEGIN
+        -- Commit transaction
+        COMMIT TRANSACTION;
+        RETURN 0;
+    END
+    ELSE
+    BEGIN
+        -- Roll back the transaction in case of error
+        ROLLBACK TRANSACTION;
+        RETURN 1; -- Return 1 to indicate failure
+    END;
+END;
