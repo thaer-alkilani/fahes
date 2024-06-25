@@ -1,0 +1,347 @@
+ALTER PROCEDURE [dbo].[SP_Registration_UpdateExemptedVehicleStatus]
+    @Plate_No INT,
+    @Plate_Type INT, 
+    @Status INT,
+    @Result INT OUTPUT,
+    @Error_Message						NVARCHAR(MAX) OUTPUT,--This Variable Used For Validation Error Messages
+	@DB_Error_Message					NVARCHAR(MAX) OUTPUT--This Variable Used For Database Error Messages
+AS
+BEGIN
+    BEGIN TRANSACTION; -- Start the transaction
+
+    BEGIN TRY
+        -- Check if the vehicle exists
+        IF EXISTS (SELECT * FROM [dbo].[Exempted_Vehicles] WHERE Plate_No = @Plate_No AND Plate_Type = @Plate_Type)
+        BEGIN
+            -- Update the status of the vehicle
+
+            UPDATE [dbo].[Exempted_Vehicles]
+            SET Status = @Status,
+                [Updated_Date] = SYSDATETIME()
+            WHERE Plate_No = @Plate_No AND Plate_Type = @Plate_Type;
+
+			declare @Selected_Request_Id int = (
+				select top 1 request_id 
+				from [dbo].[Exempted_Vehicles] 
+				WHERE Plate_No = @Plate_No AND Plate_Type = @Plate_Type
+				order by Request_Id desc
+			);
+			
+			declare @Selected_Created_By int = (
+				select  Created_By 
+				from Service_Request
+				WHERE   Request_Id  = @Selected_Request_Id
+			) ;
+
+			EXEC SP_Inspection_InsertDefectForExemptedVehicle @Plate_No, @Plate_Type, @Selected_Request_Id, @Selected_Created_By, @Result,@Error_Message,@DB_Error_Message ;
+            -- Set the @Result to the number of rows affected by the UPDATE statement
+            SET @Result = @@ROWCOUNT;
+        END
+        ELSE
+        BEGIN
+            SET @Error_Message = 'Vehicle with plate number ' + CAST(@Plate_No AS NVARCHAR) + ' and plate type ' + CAST(@Plate_Type AS NVARCHAR) + ' does not exist.';
+            SET @Result = 0;
+            ROLLBACK; -- Rollback the transaction in case of an error
+            RETURN;
+        END
+    END TRY
+
+    BEGIN CATCH
+        SET @DB_Error_Message = ERROR_MESSAGE();
+        SET @Result = 0;
+        ROLLBACK; -- Rollback the transaction in case of an error
+        RETURN;
+    END CATCH;
+
+    COMMIT; -- Commit the transaction if everything is successful
+END;
+
+
+=====================================================================
+
+
+ALTER PROCEDURE [dbo].[SP_Registration_InsertInspectionRequest]
+    @Request_Id							INT,
+    @FAHES_Receipt_No					INT = NULL,
+    @Inspection_Service_Id				INT = NULL,
+    @Plate_No							INT  = NULL,
+    @Plate_Type						    INT  = NULL,
+    @VIN_No								NVARCHAR(255) = NULL,
+    @Assign_Lane_Id						INT = NULL,
+    @Actual_Lane_Id						INT = NULL,
+    @Inspection_Start					DATETIME = NULL,
+    @Inspection_End						DATETIME = NULL,
+    @Inspection_Type				    INT = NULL,
+    @Final_Result						INT = NULL,
+    @Status								INT = NULL,
+    @Remarks							NVARCHAR(255) = NULL,
+    @Created_By							INT = NULL,
+    @Result							    INT OUTPUT,
+    @Error_Message						NVARCHAR(MAX) OUTPUT,--This Variable Used For Validation Error Messages
+	@DB_Error_Message					NVARCHAR(MAX) OUTPUT--This Variable Used For Database Error Messages
+AS
+BEGIN
+    BEGIN TRANSACTION; 
+	--Start Declaration Of Global Variables :
+	Declare @Inspection_Type_Id  INT;
+	Declare @Request_Station_Id  INT;
+	Declare @Receipt_No			 NVARCHAR(MAX);
+	--End Declaration Of Global Variables:
+
+    BEGIN TRY
+	Select @Request_Station_Id = (Select Station_Id from [dbo].[Service_Request] Where Request_Id = @Request_Id);
+    Select @Assign_Lane_Id =[dbo].[FN_Get_Suggested_Lane_Id_By_Station_Id_And_Service_Request_Id](@Request_Id , @Request_Station_Id);
+
+	IF [dbo].[FN_Registration_CheckReinspection](@VIN_No) = 1 -- 1 = Reinspection
+	Begin 
+		Select  @Inspection_Type_Id = 2;--Reinspection
+	End 
+	Else
+	Begin
+		Select  @Inspection_Type_Id = 1;--Inspection
+	End;
+	
+	--Pass the exempted vehicle automatically :
+	DECLARE @Is_Exempted_Vehicle BIT = (dbo.FN_Registration_CheckIsExemptedVehicle(@VIN_No)) ;
+	IF @Is_Exempted_Vehicle = 1
+	BEGIN 
+		SET @Status = 3;
+		SET @Final_Result = 1;
+		
+		Update dbo.service_request set [Status] = 8 where request_id = @Request_Id;
+	END;
+    
+	-- Set fahes receipt no by inspection service type :
+	IF @Inspection_Service_Id = 5 -- External Inspection :
+	BEGIN
+		SET @Receipt_No = [dbo].[FN_Registraion_GenerateFahesReceiptNoEXT]()
+	END;
+	ELSE IF @Inspection_Service_Id = 4 -- Mobile Inspection :
+	BEGIN
+		SET @Receipt_No = [dbo].[FN_Registraion_GenerateFahesReceiptNoMOB]()
+	END
+	ELSE
+	BEGIN
+		SET @Receipt_No = [dbo].[Fn_Get_Receipt_No](@Request_Id);
+	END;
+
+	
+
+	INSERT INTO  [dbo].[Inspection_Request]
+        ( 
+            [Request_Id],
+            [FAHES_Receipt_No],
+            [Inspection_Service_Id],
+            [Plate_No],
+            [Plate_Type],
+            [VIN_No],
+            [Assign_Lane_Id],
+            [Actual_Lane_Id],
+            [Inspection_Start],
+            [Inspection_End],
+            [Inspection_Type],
+            [Final_Result],
+            [Status],
+            [Remarks],
+            [Created_By],
+            [Created_Date] 
+        )
+        VALUES
+        ( 
+            @Request_Id,
+            @Receipt_No,
+            @Inspection_Service_Id,
+            @Plate_No,
+            @Plate_Type,
+            @VIN_No,
+            @Assign_Lane_Id,
+            @Actual_Lane_Id,
+            @Inspection_Start,
+            @Inspection_End,
+            @Inspection_Type_Id,
+            @Final_Result,
+            @Status,
+            @Remarks,
+            @Created_By, 
+			SYSDATETIME()
+        );
+	
+	DECLARE	@Result_InsertReceiptLog int,
+			@Error_Message_InsertReceiptLog nvarchar(max),
+			@DB_Error_Message_InsertReceiptLog nvarchar(max),
+			@Receipt_Station_Id int;
+
+	SET @Receipt_Station_Id = (SELECT TOP 1 [Station_Id] From dbo.Service_Request Where Request_Id = @Request_Id);
+
+	EXEC   [dbo].[SP_Registration_InsertReceiptLog]
+			@Request_Id = @Request_Id,
+			@FAHES_Receipt_No = @Receipt_No,
+			@Plate_Type = @Plate_Type,
+			@Station_Id = @Receipt_Station_Id,
+			@Plate_No = @Plate_No,
+			@Result = @Result_InsertReceiptLog OUTPUT,
+			@Error_Message = @Error_Message_InsertReceiptLog OUTPUT,
+			@DB_Error_Message = @DB_Error_Message_InsertReceiptLog OUTPUT 
+        SET @Result = @@ROWCOUNT;
+    END TRY
+
+    BEGIN CATCH
+        SET @DB_Error_Message = ERROR_MESSAGE();
+        ROLLBACK; -- Rollback the transaction in case of an error
+        RETURN;
+    END CATCH;
+
+    COMMIT; -- Commit the transaction if everything is successful
+END;
+
+
+
+============================================================================================
+
+
+ALTER PROCEDURE [dbo].[SP_MOI_InsertExemptedVehicles]
+    @Plate_No INT,
+    @Plate_Type NVARCHAR(255),
+    @Status INT = 1, --DEFAULT VALUE
+    @Exempted_Reason INT,
+    @Remarks NVARCHAR(255) = NULL,
+    @Created_By INT,
+    @Language NVARCHAR(10) = 'En',
+    @Result INT OUTPUT,
+    @Error_Message NVARCHAR(MAX) OUTPUT, --This Variable Used For Validation Error Messages
+    @DB_Error_Message NVARCHAR(MAX) OUTPUT --This Variable Used For Database Error Messages
+AS
+BEGIN
+    DECLARE @VIN_No NVARCHAR(255),
+            @Max_Exempted_id INT,
+            @HasActiveService BIT,
+			@Exepted_VIN_No NVARCHAR(255),
+			@InspectionFinalResult BIT ;
+			
+    BEGIN TRANSACTION; -- Start the transaction
+
+    BEGIN TRY
+        -- GET THE VIN NO FROM VEHICLE 
+        SELECT @VIN_No = Vehicle.VIN_No
+        FROM Vehicle
+        WHERE Vehicle.Plate_No = @Plate_No
+          AND Vehicle.Plate_Type = @Plate_Type;
+
+        IF @VIN_No IS NULL -- NO VEHICLE FOUND
+        BEGIN
+            IF UPPER(@Language) = 'EN'
+                SET @Error_Message = 'Vehicle with plate number ' + CAST(@Plate_No AS NVARCHAR) + ' does not exist.';
+            ELSE
+                SET @Error_Message = N'لايوجد سيارة تحمل الرقم ' + CAST(@Plate_No AS NVARCHAR);
+
+            SET @Result = 0;
+            ROLLBACK; -- Rollback the transaction in case of an error
+            RETURN;
+        END;
+
+        -- Check if vehicle has active service
+        EXEC @HasActiveService = [dbo].[FN_Registration_IsVehicleHasActiveService] @VIN_No;
+
+        IF @HasActiveService = 1 -- Vehicle has active service
+        BEGIN
+            IF UPPER(@Language) = 'EN'
+                SET @Error_Message = 'Vehicle with plate number ' + CAST(@Plate_No AS NVARCHAR) + ' has an active service.';
+            ELSE
+                SET @Error_Message = N'السيارة ذات الرقم ' + CAST(@Plate_No AS NVARCHAR) + N' لديها خدمة نشطة.';
+
+            SET @Result = 0;
+            ROLLBACK; -- Rollback the transaction in case of an error
+            RETURN;
+        END;
+
+	
+
+		--check if already exempted 
+		 
+        SELECT @Exepted_VIN_No = Exempted_Vehicles.VIN_NO
+        FROM Exempted_Vehicles
+        WHERE Exempted_Vehicles.Plate_No = @Plate_No
+          AND Exempted_Vehicles.Plate_Type = @Plate_Type
+		   AND ((Exempted_Vehicles.status = 1 or YEAR(Exempted_Vehicles.Request_Expiry_Date) > YEAR(GETDATE()))
+     );
+
+       IF @Exepted_VIN_No IS not NULL  -- NO VEHICLE FOUND
+        BEGIN
+            IF UPPER(@Language) = 'EN'
+                SET @Error_Message = 'Vehicle with plate number ' + CAST(@Plate_No AS NVARCHAR) + ' Already Exempted';
+            ELSE
+                SET @Error_Message = N'المركبة مستثناة من قبل ' + CAST(@Plate_No AS NVARCHAR) ;
+
+            SET @Result = 0;
+            ROLLBACK; -- Rollback the transaction in case of an error
+            RETURN;
+        END;
+
+
+
+		-- check if the vehicle has failed insoection
+
+		 select @InspectionFinalResult = (
+			select top 1 final_Result from Inspection_Request IR
+			where Plate_No = @Plate_No and Plate_Type = @Plate_Type
+			AND YEAR(IR.Inspection_End) = YEAR(GETDATE())
+			order by Request_Id desc
+		 )
+
+	 IF @InspectionFinalResult = 2 --Failed
+        BEGIN
+            IF UPPER(@Language) = 'EN'
+                SET @Error_Message = 'Vehicle with plate number ' + CAST(@Plate_No AS NVARCHAR) + ' was failed in the inspection and cant be Exempted';
+            ELSE
+                SET @Error_Message = N'لايمكنك اشتثناء المركبة صاحبة الرقم ' + CAST(@Plate_No AS NVARCHAR) + N' لرسوبها في الفحص الفني ' ;
+
+            SET @Result = 0;
+            ROLLBACK; -- Rollback the transaction in case of an error
+            RETURN;
+        END;
+
+
+
+        -- Get the max exempted id 
+        SELECT @Max_Exempted_id = ISNULL(MAX(Exempted_id) + 1, 1) FROM Exempted_Vehicles;
+
+        -- Insert into Exempted_Vehicles table
+        INSERT INTO Exempted_Vehicles (
+            Exempted_id,
+            Plate_No,
+            Plate_Type,
+            VIN_No,
+            Status,
+            Exempted_Reason,
+            Request_Expiry_Date,
+            Remarks,
+            Created_By,
+            Created_Date
+        )
+        VALUES (
+            @Max_Exempted_id,
+            @Plate_No,
+            @Plate_Type,
+            @VIN_No,
+            ISNULL(@Status, 1),
+            @Exempted_Reason,
+            DATEADD(WEEK,1,getdate()), -- as the requirement Request_Expiry_Date will be current date + week 
+            @Remarks,
+            @Created_By,
+            GETDATE()
+        );
+
+        SET @Result = @@ROWCOUNT;
+    END TRY
+    BEGIN CATCH
+        SET @DB_Error_Message = ERROR_MESSAGE();
+        ROLLBACK; -- Rollback the transaction in case of an error
+        RETURN;
+    END CATCH;
+
+    COMMIT; -- Commit the transaction if everything is successful
+END;
+
+
+
+=========================================================================================
