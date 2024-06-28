@@ -1,0 +1,47 @@
+Activity_ID	Station_ID	Station_Code	Business_Day	Opening_Time	Closing_Time	Total_Services	Closing_Status	Closed_By	Closing_Date	Remarks
+
+
+3	1	NULL	2024-04-23	06:00:00.0000000	18:00:00.0000000	19	Closed	Test	2024-04-23	by diyar user 1
+
+
+
+
+GL_Interface_Master
+
+
+Activity_ID	Station_ID	Service_ID	Payment_Method	Total_Services	Total_Amount
+3	1	1	Cash	8	3660.00
+3	1	2	Cash	5	2000.00
+3	1	4	Cash	6	60400.00
+
+
+
+MOI_AP
+
+Activity_ID	Station_ID	Total_Services	Total_Commission_Amount
+3	1	52	1040.00
+
+
+
+GL_Details
+
+Activity_ID	Station_ID	Service_ID	Payment_Method	Request_ID	Bank_Trans_ID
+3	1	1	Cash	8131	NULL
+3	1	1	Cash	8133	NULL
+3	1	1	Cash	8135	NULL
+3	1	1	Cash	8139	NULL
+3	1	1	Cash	8140	NULL
+3	1	1	Cash	8142	NULL
+3	1	1	Cash	8150	NULL
+3	1	1	Cash	8152	NULL
+3	1	2	Cash	8121	NULL
+3	1	2	Cash	8122	NULL
+3	1	2	Cash	8124	NULL
+3	1	2	Cash	8125	NULL
+3	1	2	Cash	8146	NULL
+3	1	4	Cash	8123	NULL
+3	1	4	Cash	8127	NULL
+3	1	4	Cash	8128	NULL
+3	1	4	Cash	8129	NULL
+3	1	4	Cash	8143	NULL
+3	1	4	Cash	8147	NULL
